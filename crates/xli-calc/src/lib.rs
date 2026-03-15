@@ -1,3 +1,7 @@
 #![forbid(unsafe_code)]
 
-//! Workspace bootstrap stub for the xli-calc crate.
+//! Formula recalculation helpers.
+
+mod libreoffice;
+
+pub use libreoffice::{recalc, RecalcResult};

@@ -9,4 +9,6 @@ version.workspace = true
 anyhow.workspace = true
 schemars.workspace = true
 serde_json.workspace = true
+xli-calc = { path = "../xli-calc" }
 xli-core = { path = "../xli-core" }
+xli-read = { path = "../xli-read" }
