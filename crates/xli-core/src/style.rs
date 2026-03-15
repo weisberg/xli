@@ -35,11 +35,17 @@ pub struct FontSpec {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct StyleSpec {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub number_format: Option<NumberFormat>,
+    pub bold: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fill: Option<FillSpec>,
+    pub italic: Option<bool>,
+    #[serde(rename = "font_color", skip_serializing_if = "Option::is_none")]
+    pub font_color: Option<String>,
+    #[serde(rename = "fill", skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
+    #[serde(rename = "number_format", skip_serializing_if = "Option::is_none")]
+    pub number_format: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub font: Option<FontSpec>,
+    pub column_width: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub horizontal_align: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

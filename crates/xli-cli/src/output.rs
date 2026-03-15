@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::io::{self, Write};
-use xli_core::ResponseEnvelope;
+use xli_core::{CommitMode, CommitStats, ResponseEnvelope, Status, XliError};
 
 /// Emit a response envelope in JSON or minimal human-readable text form.
 pub fn emit<T>(envelope: &ResponseEnvelope<T>, human: bool) -> anyhow::Result<()>
@@ -28,4 +28,58 @@ where
     }
 
     Ok(())
+}
+
+pub fn ok_envelope<T>(
+    command: &str,
+    input: serde_json::Value,
+    output: T,
+    warnings: Vec<String>,
+    needs_recalc: bool,
+    commit_mode: CommitMode,
+    fingerprint_before: Option<String>,
+    fingerprint_after: Option<String>,
+    stats: CommitStats,
+) -> ResponseEnvelope<T>
+where
+    T: Serialize,
+{
+    ResponseEnvelope {
+        status: Status::Ok,
+        command: command.to_string(),
+        input: Some(input),
+        output: Some(output),
+        commit_mode,
+        fingerprint_before,
+        fingerprint_after,
+        needs_recalc,
+        stats,
+        warnings,
+        errors: Vec::new(),
+        suggested_repairs: Vec::new(),
+    }
+}
+
+pub fn error_envelope<T>(
+    command: &str,
+    input: Option<serde_json::Value>,
+    error: XliError,
+) -> ResponseEnvelope<T>
+where
+    T: Serialize,
+{
+    ResponseEnvelope {
+        status: Status::Error,
+        command: command.to_string(),
+        input,
+        output: None,
+        commit_mode: CommitMode::None,
+        fingerprint_before: None,
+        fingerprint_after: None,
+        needs_recalc: false,
+        stats: CommitStats::default(),
+        warnings: Vec::new(),
+        errors: vec![error],
+        suggested_repairs: Vec::new(),
+    }
 }

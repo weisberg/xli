@@ -1,3 +1,7 @@
 #![forbid(unsafe_code)]
 
-//! Workspace bootstrap stub for the xli-new crate.
+//! New workbook generation helpers.
+
+mod create;
+
+pub use create::{create_blank, create_from_csv};

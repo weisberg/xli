@@ -4,7 +4,10 @@ mod commands;
 mod output;
 
 use clap::{Parser, Subcommand};
-use commands::inspect::InspectArgs;
+use commands::{
+    batch::BatchArgs, create::CreateArgs, format::FormatArgs, inspect::InspectArgs,
+    read::ReadArgs, sheet::SheetArgs, write::WriteArgs,
+};
 use serde::Serialize;
 use xli_core::{CommitMode, CommitStats, ResponseEnvelope, Status, XliError};
 
@@ -20,6 +23,12 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Inspect(InspectArgs),
+    Read(ReadArgs),
+    Write(WriteArgs),
+    Format(FormatArgs),
+    Sheet(SheetArgs),
+    Batch(BatchArgs),
+    Create(CreateArgs),
 }
 
 fn main() {
@@ -51,6 +60,12 @@ fn main() {
 fn run(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Commands::Inspect(args) => commands::inspect::run(args, cli.human)?,
+        Commands::Read(args) => commands::read::run(args, cli.human)?,
+        Commands::Write(args) => commands::write::run(args, cli.human)?,
+        Commands::Format(args) => commands::format::run(args, cli.human)?,
+        Commands::Sheet(args) => commands::sheet::run(args, cli.human)?,
+        Commands::Batch(args) => commands::batch::run(args, cli.human)?,
+        Commands::Create(args) => commands::create::run(args, cli.human)?,
     }
     Ok(())
 }

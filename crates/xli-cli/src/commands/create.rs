@@ -1,0 +1,61 @@
+use anyhow::Result;
+use clap::Args;
+use serde::Serialize;
+use std::path::PathBuf;
+
+use crate::output;
+
+#[derive(Debug, Args)]
+pub struct CreateArgs {
+    pub name: PathBuf,
+    #[arg(long)]
+    pub sheets: Option<String>,
+    #[arg(long)]
+    pub from_csv: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CreateOutput {
+    file: String,
+    sheets_created: usize,
+}
+
+pub fn run(args: CreateArgs, human: bool) -> Result<()> {
+    let input = serde_json::json!({
+        "name": args.name,
+        "sheets": args.sheets,
+        "from_csv": args.from_csv,
+    });
+    let result = if let Some(csv) = args.from_csv.as_deref() {
+        xli_new::create_from_csv(csv, &args.name, "Sheet1").map(|_| 1)
+    } else {
+        let sheets = args
+            .sheets
+            .as_deref()
+            .map(|value| value.split(',').map(|item| item.trim().to_string()).collect::<Vec<_>>())
+            .unwrap_or_default();
+        let count = if sheets.is_empty() { 1 } else { sheets.len() };
+        xli_new::create_blank(&args.name, &sheets).map(|_| count)
+    };
+
+    match result {
+        Ok(sheets_created) => output::emit(
+            &output::ok_envelope(
+                "create",
+                input,
+                CreateOutput {
+                    file: args.name.display().to_string(),
+                    sheets_created,
+                },
+                Vec::new(),
+                false,
+                xli_core::CommitMode::None,
+                None,
+                None,
+                xli_core::CommitStats::default(),
+            ),
+            human,
+        ),
+        Err(error) => output::emit(&output::error_envelope::<CreateOutput>("create", Some(input), error), human),
+    }
+}
