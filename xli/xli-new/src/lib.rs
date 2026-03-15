@@ -4,4 +4,4 @@
 
 mod create;
 
-pub use create::{create_blank, create_from_csv};
+pub use create::{create_blank, create_from_csv, create_from_markdown};

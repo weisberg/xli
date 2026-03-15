@@ -13,6 +13,8 @@ pub struct CreateArgs {
     pub sheets: Option<String>,
     #[arg(long)]
     pub from_csv: Option<PathBuf>,
+    #[arg(long)]
+    pub from_markdown: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
@@ -26,9 +28,12 @@ pub fn run(args: CreateArgs, human: bool) -> Result<bool> {
         "name": args.name,
         "sheets": args.sheets,
         "from_csv": args.from_csv,
+        "from_markdown": args.from_markdown,
     });
     let result = if let Some(csv) = args.from_csv.as_deref() {
         xli_new::create_from_csv(csv, &args.name, "Sheet1").map(|_| 1)
+    } else if let Some(md) = args.from_markdown.as_deref() {
+        xli_new::create_from_markdown(md, &args.name, "Sheet1").map(|_| 1)
     } else {
         let sheets = args
             .sheets
