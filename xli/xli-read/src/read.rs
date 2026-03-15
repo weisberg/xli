@@ -1,4 +1,4 @@
-use calamine::{open_workbook, Data, Reader, Xlsx};
+use calamine::{open_workbook, Data, Reader, SheetType, Xlsx};
 use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -199,6 +199,86 @@ pub fn read_table(
     })
 }
 
+pub fn read_all_sheets(path: &Path) -> Result<Value, XliError> {
+    let mut workbook = open_xlsx(path)?;
+    let metadata = workbook.sheets_metadata().to_vec();
+    let sheet_names = workbook.sheet_names();
+
+    let mut sheets = Map::new();
+    for (index, name) in sheet_names.iter().enumerate() {
+        // Skip chart sheets
+        if metadata
+            .get(index)
+            .is_some_and(|m| m.typ == SheetType::ChartSheet)
+        {
+            continue;
+        }
+
+        let range = workbook
+            .worksheet_range(name)
+            .map_err(calamine_error)?;
+
+        let mut matrix: Vec<Vec<Value>> = Vec::new();
+        for row in range.rows() {
+            matrix.push(row.iter().map(data_to_json).collect());
+        }
+
+        if matrix.is_empty() {
+            sheets.insert(
+                name.clone(),
+                json!({
+                    "headers": [],
+                    "rows": [],
+                    "row_count": 0
+                }),
+            );
+            continue;
+        }
+
+        let headers: Vec<String> = matrix[0]
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                v.as_str()
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| format!("col_{}", i + 1))
+            })
+            .collect();
+
+        let rows: Vec<Map<String, Value>> = matrix
+            .iter()
+            .skip(1)
+            .map(|row| {
+                row.iter()
+                    .enumerate()
+                    .map(|(i, v)| {
+                        let key = headers
+                            .get(i)
+                            .cloned()
+                            .unwrap_or_else(|| format!("col_{}", i + 1));
+                        (key, v.clone())
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let row_count = rows.len();
+        sheets.insert(
+            name.clone(),
+            json!({
+                "headers": headers,
+                "rows": rows,
+                "row_count": row_count
+            }),
+        );
+    }
+
+    Ok(json!({
+        "file": path.display().to_string(),
+        "sheets": sheets
+    }))
+}
+
 fn open_xlsx(path: &Path) -> Result<Xlsx<BufReader<std::fs::File>>, XliError> {
     if !path.exists() {
         return Err(XliError::FileNotFound {
@@ -267,7 +347,7 @@ fn calamine_error<E: std::fmt::Display>(error: E) -> XliError {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_cell, read_range, CellValueType, XliError};
+    use super::{read_all_sheets, read_cell, read_range, CellValueType, XliError};
     use rust_xlsxwriter::Workbook;
     use serde_json::json;
     use tempfile::tempdir;
@@ -307,6 +387,55 @@ mod tests {
         assert!(range.truncated);
         assert_eq!(range.rows.len(), 1);
         assert_eq!(range.rows[0]["name"], json!("foo"));
+    }
+
+    #[test]
+    fn reads_all_sheets() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("multi.xlsx");
+        let mut workbook = Workbook::new();
+
+        let summary = workbook.add_worksheet();
+        summary.set_name("Summary").expect("name");
+        summary.write_string(0, 0, "Name").expect("write");
+        summary.write_string(0, 1, "Score").expect("write");
+        summary.write_string(1, 0, "Alice").expect("write");
+        summary.write_number(1, 1, 95.0).expect("write");
+        summary.write_string(2, 0, "Bob").expect("write");
+        summary.write_number(2, 1, 87.0).expect("write");
+
+        let data = workbook.add_worksheet();
+        data.set_name("Data").expect("name");
+        data.write_string(0, 0, "ID").expect("write");
+        data.write_string(0, 1, "Value").expect("write");
+        data.write_number(1, 0, 1.0).expect("write");
+        data.write_string(1, 1, "x").expect("write");
+
+        workbook.save(&path).expect("save");
+
+        let result = read_all_sheets(&path).expect("read_all_sheets");
+        assert_eq!(result["file"], path.display().to_string());
+
+        let sheets = &result["sheets"];
+        // Both sheets present
+        assert!(sheets.get("Summary").is_some());
+        assert!(sheets.get("Data").is_some());
+
+        // Summary sheet
+        let summary = &sheets["Summary"];
+        assert_eq!(summary["headers"], json!(["Name", "Score"]));
+        assert_eq!(summary["row_count"], 2);
+        assert_eq!(summary["rows"][0]["Name"], json!("Alice"));
+        assert_eq!(summary["rows"][0]["Score"], json!(95.0));
+        assert_eq!(summary["rows"][1]["Name"], json!("Bob"));
+        assert_eq!(summary["rows"][1]["Score"], json!(87.0));
+
+        // Data sheet
+        let data = &sheets["Data"];
+        assert_eq!(data["headers"], json!(["ID", "Value"]));
+        assert_eq!(data["row_count"], 1);
+        assert_eq!(data["rows"][0]["ID"], json!(1.0));
+        assert_eq!(data["rows"][0]["Value"], json!("x"));
     }
 
     #[test]

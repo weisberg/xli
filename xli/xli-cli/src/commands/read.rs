@@ -31,6 +31,20 @@ pub struct ReadArgs {
 }
 
 pub fn run(args: ReadArgs, human: bool) -> Result<bool> {
+    // json-full whole-workbook export: only when no specific address/range/table
+    if args.format == "json-full"
+        && args.address.is_none()
+        && args.range.is_none()
+        && args.table.is_none()
+    {
+        let result = xli_read::read_all_sheets(&args.file)?;
+        let stdout = io::stdout();
+        let mut out = stdout.lock();
+        serde_json::to_writer_pretty(&mut out, &result)?;
+        writeln!(out)?;
+        return Ok(false);
+    }
+
     let markdown = args.format == "markdown";
     let use_headers = args.headers || markdown;
 

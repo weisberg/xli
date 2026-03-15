@@ -1,4 +1,5 @@
 use rust_xlsxwriter::Workbook;
+use serde_json::Value;
 use std::path::Path;
 use xli_core::XliError;
 
@@ -140,6 +141,152 @@ pub fn create_from_markdown(
         })
 }
 
+/// Create a workbook from a JSON template file.
+///
+/// The JSON format supports multiple sheets, optional headers, and rows as
+/// either arrays or objects. See crate-level docs for the full schema.
+///
+/// Returns the number of sheets created.
+pub fn create_from_json(json_path: &Path, out_path: &Path) -> Result<usize, XliError> {
+    let content = std::fs::read_to_string(json_path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            XliError::FileNotFound {
+                path: json_path.display().to_string(),
+            }
+        } else {
+            XliError::OoxmlCorrupt {
+                details: error.to_string(),
+            }
+        }
+    })?;
+
+    let root: Value = serde_json::from_str(&content).map_err(|error| XliError::OoxmlCorrupt {
+        details: format!("invalid JSON: {error}"),
+    })?;
+
+    let sheets = root
+        .get("sheets")
+        .and_then(Value::as_object)
+        .ok_or_else(|| XliError::OoxmlCorrupt {
+            details: "JSON must have a \"sheets\" object at the top level".to_string(),
+        })?;
+
+    let mut workbook = Workbook::new();
+    let sheet_count = sheets.len();
+
+    for (sheet_name, sheet_def) in sheets {
+        let worksheet = workbook.add_worksheet();
+        worksheet
+            .set_name(sheet_name)
+            .map_err(|error| XliError::WriteConflict {
+                target: sheet_name.clone(),
+                details: Some(error.to_string()),
+            })?;
+
+        let rows = sheet_def.get("rows").and_then(Value::as_array);
+        let explicit_headers = sheet_def.get("headers").and_then(Value::as_array);
+
+        // Determine headers: explicit, or derived from first object row
+        let derived_headers: Option<Vec<String>> = if explicit_headers.is_none() {
+            rows.and_then(|r| r.first())
+                .and_then(Value::as_object)
+                .map(|obj| obj.keys().cloned().collect())
+        } else {
+            None
+        };
+
+        let headers: Option<Vec<String>> = explicit_headers
+            .map(|arr| {
+                arr.iter()
+                    .map(|v| v.as_str().unwrap_or_default().to_string())
+                    .collect()
+            })
+            .or(derived_headers);
+
+        let mut row_offset: u32 = 0;
+
+        // Write headers if present
+        if let Some(ref hdrs) = headers {
+            for (col, hdr) in hdrs.iter().enumerate() {
+                worksheet
+                    .write_string(0, col as u16, hdr)
+                    .map_err(|error| XliError::OoxmlCorrupt {
+                        details: error.to_string(),
+                    })?;
+            }
+            row_offset = 1;
+        }
+
+        // Write rows
+        if let Some(rows) = rows {
+            for (r, row_val) in rows.iter().enumerate() {
+                let row_idx = row_offset + r as u32;
+                match row_val {
+                    Value::Array(cells) => {
+                        for (c, cell) in cells.iter().enumerate() {
+                            write_json_cell(worksheet, row_idx, c as u16, cell)?;
+                        }
+                    }
+                    Value::Object(obj) => {
+                        if let Some(ref hdrs) = headers {
+                            for (c, key) in hdrs.iter().enumerate() {
+                                if let Some(cell) = obj.get(key) {
+                                    write_json_cell(worksheet, row_idx, c as u16, cell)?;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    workbook
+        .save(out_path)
+        .map_err(|error| XliError::OoxmlCorrupt {
+            details: error.to_string(),
+        })?;
+
+    Ok(sheet_count)
+}
+
+fn write_json_cell(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    col: u16,
+    value: &Value,
+) -> Result<(), XliError> {
+    match value {
+        Value::Number(n) => {
+            let num = n.as_f64().unwrap_or(0.0);
+            worksheet
+                .write_number(row, col, num)
+                .map_err(|e| XliError::OoxmlCorrupt {
+                    details: e.to_string(),
+                })?;
+        }
+        Value::String(s) => {
+            worksheet
+                .write_string(row, col, s)
+                .map_err(|e| XliError::OoxmlCorrupt {
+                    details: e.to_string(),
+                })?;
+        }
+        Value::Bool(b) => {
+            worksheet
+                .write_boolean(row, col, *b)
+                .map_err(|e| XliError::OoxmlCorrupt {
+                    details: e.to_string(),
+                })?;
+        }
+        Value::Null | Value::Array(_) | Value::Object(_) => {
+            // Skip null and complex types
+        }
+    }
+    Ok(())
+}
+
 /// Parse a markdown pipe table into a Vec of rows (each row is a Vec of cell strings).
 /// Skips the separator row (contains only dashes/colons/pipes).
 fn parse_markdown_table(content: &str) -> Result<Vec<Vec<String>>, XliError> {
@@ -193,7 +340,7 @@ fn is_separator_row(line: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{create_blank, create_from_csv, create_from_markdown};
+    use super::{create_blank, create_from_csv, create_from_json, create_from_markdown};
     use calamine::{open_workbook, Reader, Xlsx};
     use std::fs;
     use tempfile::tempdir;
@@ -329,5 +476,156 @@ mod tests {
             range.get_value((1, 0)).map(|c: &calamine::Data| c.to_string()),
             Some("1".to_string())
         );
+    }
+
+    #[test]
+    fn creates_workbook_from_json_with_headers() {
+        let dir = tempdir().expect("tempdir");
+        let json = dir.path().join("data.json");
+        let out = dir.path().join("data.xlsx");
+        fs::write(
+            &json,
+            r#"{
+                "sheets": {
+                    "Summary": {
+                        "headers": ["Name", "Score", "Grade"],
+                        "rows": [
+                            ["Alice", 95, "A"],
+                            ["Bob", 87, "B+"]
+                        ]
+                    }
+                }
+            }"#,
+        )
+        .expect("write");
+
+        let count = create_from_json(&json, &out).expect("create");
+        assert_eq!(count, 1);
+
+        let mut workbook: Xlsx<_> = open_workbook(&out).expect("open");
+        let range = workbook.worksheet_range("Summary").expect("range");
+        // Headers
+        assert_eq!(
+            range.get_value((0, 0)).map(|c: &calamine::Data| c.to_string()),
+            Some("Name".to_string())
+        );
+        assert_eq!(
+            range.get_value((0, 2)).map(|c: &calamine::Data| c.to_string()),
+            Some("Grade".to_string())
+        );
+        // Data row 1
+        assert_eq!(
+            range.get_value((1, 0)).map(|c: &calamine::Data| c.to_string()),
+            Some("Alice".to_string())
+        );
+        assert_eq!(
+            range.get_value((1, 1)).map(|c: &calamine::Data| c.to_string()),
+            Some("95".to_string())
+        );
+        // Data row 2
+        assert_eq!(
+            range.get_value((2, 2)).map(|c: &calamine::Data| c.to_string()),
+            Some("B+".to_string())
+        );
+    }
+
+    #[test]
+    fn creates_workbook_from_json_object_rows() {
+        let dir = tempdir().expect("tempdir");
+        let json = dir.path().join("obj.json");
+        let out = dir.path().join("obj.xlsx");
+        fs::write(
+            &json,
+            r#"{
+                "sheets": {
+                    "Sheet1": {
+                        "rows": [
+                            {"Name": "Alice", "Score": 95},
+                            {"Name": "Bob", "Score": 87}
+                        ]
+                    }
+                }
+            }"#,
+        )
+        .expect("write");
+
+        create_from_json(&json, &out).expect("create");
+
+        let mut workbook: Xlsx<_> = open_workbook(&out).expect("open");
+        let range = workbook.worksheet_range("Sheet1").expect("range");
+        // Headers derived from keys of first object
+        let h0 = range.get_value((0, 0)).map(|c: &calamine::Data| c.to_string()).unwrap();
+        let h1 = range.get_value((0, 1)).map(|c: &calamine::Data| c.to_string()).unwrap();
+        // Keys may be in any order, so just check both are present
+        let mut headers = vec![h0, h1];
+        headers.sort();
+        assert_eq!(headers, vec!["Name", "Score"]);
+        // Data should be in row 1
+        // Find which column is "Name"
+        let name_col = if range.get_value((0, 0)).map(|c: &calamine::Data| c.to_string()) == Some("Name".to_string()) {
+            0u16
+        } else {
+            1u16
+        };
+        assert_eq!(
+            range.get_value((1, name_col as u32)).map(|c: &calamine::Data| c.to_string()),
+            Some("Alice".to_string())
+        );
+    }
+
+    #[test]
+    fn creates_multi_sheet_from_json() {
+        let dir = tempdir().expect("tempdir");
+        let json = dir.path().join("multi.json");
+        let out = dir.path().join("multi.xlsx");
+        fs::write(
+            &json,
+            r#"{
+                "sheets": {
+                    "First": {
+                        "headers": ["A"],
+                        "rows": [["x"]]
+                    },
+                    "Second": {
+                        "headers": ["B"],
+                        "rows": [["y"]]
+                    }
+                }
+            }"#,
+        )
+        .expect("write");
+
+        let count = create_from_json(&json, &out).expect("create");
+        assert_eq!(count, 2);
+
+        let mut workbook: Xlsx<_> = open_workbook(&out).expect("open");
+        let names = workbook.sheet_names().to_vec();
+        assert!(names.contains(&"First".to_string()));
+        assert!(names.contains(&"Second".to_string()));
+
+        let r1 = workbook.worksheet_range("First").expect("range");
+        assert_eq!(
+            r1.get_value((0, 0)).map(|c: &calamine::Data| c.to_string()),
+            Some("A".to_string())
+        );
+        assert_eq!(
+            r1.get_value((1, 0)).map(|c: &calamine::Data| c.to_string()),
+            Some("x".to_string())
+        );
+
+        let r2 = workbook.worksheet_range("Second").expect("range");
+        assert_eq!(
+            r2.get_value((1, 0)).map(|c: &calamine::Data| c.to_string()),
+            Some("y".to_string())
+        );
+    }
+
+    #[test]
+    fn json_missing_file_returns_error() {
+        let dir = tempdir().expect("tempdir");
+        let json = dir.path().join("nope.json");
+        let out = dir.path().join("out.xlsx");
+        let err = create_from_json(&json, &out).expect_err("missing");
+        assert!(matches!(err, xli_core::XliError::FileNotFound { .. }));
     }
 }
