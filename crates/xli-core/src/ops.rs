@@ -46,6 +46,7 @@ pub enum BatchOp {
     },
     Format {
         range: String,
+        #[serde(flatten)]
         style: StyleSpec,
     },
     Sheet {

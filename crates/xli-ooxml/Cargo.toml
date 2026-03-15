@@ -8,5 +8,8 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 quick-xml.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+umya-spreadsheet.workspace = true
 zip.workspace = true
 xli-core = { path = "../xli-core" }
