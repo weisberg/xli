@@ -3,7 +3,9 @@ use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
 use umya_spreadsheet::{self, NumberingFormat, SheetStateValues, Spreadsheet, Style};
-use xli_core::{BatchOp, SheetAction, StyleSpec, XliError, col_to_letter, parse_address, parse_range};
+use xli_core::{
+    col_to_letter, parse_address, parse_range, BatchOp, SheetAction, StyleSpec, XliError,
+};
 
 pub const UMYA_FALLBACK_WARNING: &str =
     "Used umya-spreadsheet fallback for workbook mutation. Some workbook artifacts may have been modified.";
@@ -36,7 +38,12 @@ pub fn apply_write(
     })
 }
 
-pub fn apply_format(src: &Path, dst: &Path, range: &str, style: &StyleSpec) -> Result<(), XliError> {
+pub fn apply_format(
+    src: &Path,
+    dst: &Path,
+    range: &str,
+    style: &StyleSpec,
+) -> Result<(), XliError> {
     mutate_workbook(src, dst, |book| {
         format_in_book(book, range, style)?;
         Ok(())
@@ -50,7 +57,11 @@ pub fn apply_sheet_action(src: &Path, dst: &Path, action: &SheetAction) -> Resul
     })
 }
 
-pub fn apply_batch(src: &Path, dst: &Path, ops: &[BatchOp]) -> Result<(BatchSummary, bool), XliError> {
+pub fn apply_batch(
+    src: &Path,
+    dst: &Path,
+    ops: &[BatchOp],
+) -> Result<(BatchSummary, bool), XliError> {
     mutate_workbook(src, dst, |book| {
         let mut summary = BatchSummary::default();
         let mut needs_recalc = false;
@@ -102,9 +113,10 @@ fn mutate_workbook<T, F>(src: &Path, dst: &Path, mutate: F) -> Result<T, XliErro
 where
     F: FnOnce(&mut Spreadsheet) -> Result<T, XliError>,
 {
-    let mut book = umya_spreadsheet::reader::xlsx::read(src).map_err(|error| XliError::OoxmlCorrupt {
-        details: error.to_string(),
-    })?;
+    let mut book =
+        umya_spreadsheet::reader::xlsx::read(src).map_err(|error| XliError::OoxmlCorrupt {
+            details: error.to_string(),
+        })?;
     let result = mutate(&mut book)?;
     write_workbook(&book, dst)?;
     Ok(result)
@@ -118,11 +130,11 @@ fn write_into_book(
 ) -> Result<bool, XliError> {
     let cell = parse_address(address).map_err(XliError::from)?;
     let sheet_name = resolve_sheet_name(book, cell.sheet.as_deref())?;
-    let worksheet = book
-        .get_sheet_by_name_mut(&sheet_name)
-        .ok_or_else(|| XliError::SheetNotFound {
-            sheet: sheet_name.clone(),
-        })?;
+    let worksheet =
+        book.get_sheet_by_name_mut(&sheet_name)
+            .ok_or_else(|| XliError::SheetNotFound {
+                sheet: sheet_name.clone(),
+            })?;
     let coordinate = format!("{}{}", cell.col, cell.row);
     let target = worksheet.get_cell_mut(coordinate.as_str());
 
@@ -160,11 +172,11 @@ fn write_into_book(
 fn format_in_book(book: &mut Spreadsheet, range: &str, style: &StyleSpec) -> Result<(), XliError> {
     let range_ref = parse_range(range).map_err(XliError::from)?;
     let sheet_name = resolve_sheet_name(book, range_ref.sheet.as_deref())?;
-    let worksheet = book
-        .get_sheet_by_name_mut(&sheet_name)
-        .ok_or_else(|| XliError::SheetNotFound {
-            sheet: sheet_name.clone(),
-        })?;
+    let worksheet =
+        book.get_sheet_by_name_mut(&sheet_name)
+            .ok_or_else(|| XliError::SheetNotFound {
+                sheet: sheet_name.clone(),
+            })?;
     let plain_range = format!(
         "{}{}:{}{}",
         range_ref.start.col, range_ref.start.row, range_ref.end.col, range_ref.end.row
@@ -181,7 +193,10 @@ fn format_in_book(book: &mut Spreadsheet, range: &str, style: &StyleSpec) -> Res
         has_changes = true;
     }
     if let Some(font_color) = style.font_color.as_ref() {
-        umya_style.get_font_mut().get_color_mut().set_argb(normalize_argb(font_color));
+        umya_style
+            .get_font_mut()
+            .get_color_mut()
+            .set_argb(normalize_argb(font_color));
         has_changes = true;
     }
     if let Some(fill_color) = style.fill.as_ref() {
@@ -223,12 +238,13 @@ fn sheet_action_in_book(book: &mut Spreadsheet, action: &SheetAction) -> Result<
                     .iter()
                     .map(|s| s.get_name().to_string())
                     .collect();
-                let after_idx = all_names
-                    .iter()
-                    .position(|n| n == after_name)
-                    .ok_or_else(|| XliError::SheetNotFound {
-                        sheet: after_name.clone(),
-                    })?;
+                let after_idx =
+                    all_names
+                        .iter()
+                        .position(|n| n == after_name)
+                        .ok_or_else(|| XliError::SheetNotFound {
+                            sheet: after_name.clone(),
+                        })?;
                 // Build the new order: everything up to and including after_idx,
                 // then the new sheet, then everything else (excluding the new sheet
                 // which was appended at the end).
@@ -243,7 +259,8 @@ fn sheet_action_in_book(book: &mut Spreadsheet, action: &SheetAction) -> Result<
             }
         }
         SheetAction::Delete { name } => {
-            book.remove_sheet_by_name(name).map_err(sheet_action_error)?;
+            book.remove_sheet_by_name(name)
+                .map_err(sheet_action_error)?;
         }
         SheetAction::Rename { from, to } => {
             let index = find_sheet_index(book, from).ok_or_else(|| XliError::SheetNotFound {

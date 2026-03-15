@@ -17,11 +17,9 @@ pub struct SchemaArgs {
 pub fn run(args: SchemaArgs, human: bool) -> Result<bool> {
     let schema = match (&args.command, &args.result, args.openapi) {
         (None, None, true) => Ok(xli_schema::emit_openapi()),
-        (Some(_), Some(_), _) => {
-            Err(xli_core::XliError::CliParseError {
+        (Some(_), Some(_), _) => Err(xli_core::XliError::CliParseError {
             message: "--command and --result are mutually exclusive".to_string(),
-            })
-        }
+        }),
         (Some(command), None, false) => xli_schema::emit_command_schema(command),
         (None, Some(result), false) => emit_result_schema(result),
         (None, None, false) => Ok(xli_schema::emit_full_schema()),
@@ -45,7 +43,10 @@ pub fn run(args: SchemaArgs, human: bool) -> Result<bool> {
             writeln!(out)?;
             Ok(false)
         }
-        Err(error) => output::emit(&output::error_envelope::<serde_json::Value>("schema", None, error), human),
+        Err(error) => output::emit(
+            &output::error_envelope::<serde_json::Value>("schema", None, error),
+            human,
+        ),
     }
 }
 

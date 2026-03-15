@@ -8,8 +8,8 @@ mod lock;
 mod staging;
 
 pub use commit::{
-    AtomicCommitOptions, CommitResult, atomic_commit, atomic_commit_with_options,
-    validate_ooxml_file,
+    atomic_commit, atomic_commit_with_options, validate_ooxml_file, AtomicCommitOptions,
+    CommitResult,
 };
 pub use fingerprint::fingerprint;
 pub use lock::WorkbookLock;

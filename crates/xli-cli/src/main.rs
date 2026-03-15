@@ -6,15 +6,19 @@ mod output;
 use clap::{Parser, Subcommand};
 use commands::{
     batch::BatchArgs, create::CreateArgs, doctor::DoctorArgs, format::FormatArgs,
-    inspect::InspectArgs, lint::LintArgs, read::ReadArgs, recalc::RecalcArgs,
-    schema::SchemaArgs, sheet::SheetArgs, validate::ValidateArgs, write::WriteArgs,
+    inspect::InspectArgs, lint::LintArgs, read::ReadArgs, recalc::RecalcArgs, schema::SchemaArgs,
+    sheet::SheetArgs, validate::ValidateArgs, write::WriteArgs,
 };
 use schemars::JsonSchema;
 use serde::Serialize;
 use xli_core::{CommitMode, CommitStats, ResponseEnvelope, Status, XliError};
 
 #[derive(Debug, Parser)]
-#[command(name = "xli", version, about = "Excel CLI for structured workbook operations")]
+#[command(
+    name = "xli",
+    version,
+    about = "Excel CLI for structured workbook operations"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -45,8 +49,8 @@ fn main() {
             if !std::env::args().any(|arg| arg == "--human") {
                 let envelope: ResponseEnvelope<serde_json::Value> =
                     make_error_envelope(XliError::CliParseError {
-                    message: error.to_string(),
-                });
+                        message: error.to_string(),
+                    });
                 let _ = output::emit(&envelope, false);
                 std::process::exit(2);
             }

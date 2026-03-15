@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::PathBuf;
-use xli_fs::{AtomicCommitOptions, atomic_commit_with_options};
+use xli_fs::{atomic_commit_with_options, AtomicCommitOptions};
 use xli_ooxml::UMYA_FALLBACK_WARNING;
 
 use crate::output;
@@ -49,7 +49,15 @@ pub fn run(args: WriteArgs, human: bool) -> Result<bool> {
         AtomicCommitOptions {
             dry_run: args.dry_run,
         },
-        |src, dst| xli_ooxml::apply_write(src, dst, &address, parsed_value.clone(), args.formula.clone()),
+        |src, dst| {
+            xli_ooxml::apply_write(
+                src,
+                dst,
+                &address,
+                parsed_value.clone(),
+                args.formula.clone(),
+            )
+        },
     );
 
     match result {
@@ -75,7 +83,10 @@ pub fn run(args: WriteArgs, human: bool) -> Result<bool> {
             ),
             human,
         ),
-        Err(error) => output::emit(&output::error_envelope::<WriteOutput>("write", Some(input), error), human),
+        Err(error) => output::emit(
+            &output::error_envelope::<WriteOutput>("write", Some(input), error),
+            human,
+        ),
     }
 }
 

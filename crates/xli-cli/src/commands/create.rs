@@ -33,7 +33,12 @@ pub fn run(args: CreateArgs, human: bool) -> Result<bool> {
         let sheets = args
             .sheets
             .as_deref()
-            .map(|value| value.split(',').map(|item| item.trim().to_string()).collect::<Vec<_>>())
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|item| item.trim().to_string())
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         let count = if sheets.is_empty() { 1 } else { sheets.len() };
         xli_new::create_blank(&args.name, &sheets).map(|_| count)
@@ -57,6 +62,9 @@ pub fn run(args: CreateArgs, human: bool) -> Result<bool> {
             ),
             human,
         ),
-        Err(error) => output::emit(&output::error_envelope::<CreateOutput>("create", Some(input), error), human),
+        Err(error) => output::emit(
+            &output::error_envelope::<CreateOutput>("create", Some(input), error),
+            human,
+        ),
     }
 }

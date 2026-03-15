@@ -19,12 +19,14 @@ fn create_and_inspect_workbook() {
         .expect("create");
     assert!(output.status.success());
 
-    let inspect = run_json([
-        "inspect",
-        path.to_str().expect("path"),
-    ]);
+    let inspect = run_json(["inspect", path.to_str().expect("path")]);
     assert_eq!(inspect["status"], "ok");
-    assert_eq!(inspect["output"]["sheets"].as_array().map(|items| items.len()), Some(2));
+    assert_eq!(
+        inspect["output"]["sheets"]
+            .as_array()
+            .map(|items| items.len()),
+        Some(2)
+    );
 }
 
 #[test]
@@ -47,11 +49,7 @@ fn write_and_read_cell_round_trip() {
     ]);
     assert_eq!(write["status"], "ok");
 
-    let read = run_json([
-        "read",
-        path.to_str().expect("path"),
-        "Data!A1",
-    ]);
+    let read = run_json(["read", path.to_str().expect("path"), "Data!A1"]);
     assert_eq!(read["status"], "ok");
     assert_eq!(read["output"]["value"], 42.0);
 }
@@ -110,12 +108,7 @@ fn sheet_add_rename_and_hide() {
         "Summary,Data",
     ]);
 
-    let add = run_json([
-        "sheet",
-        path.to_str().expect("path"),
-        "add",
-        "Charts",
-    ]);
+    let add = run_json(["sheet", path.to_str().expect("path"), "add", "Charts"]);
     assert_eq!(add["status"], "ok");
 
     let rename = run_json([
@@ -128,18 +121,10 @@ fn sheet_add_rename_and_hide() {
     ]);
     assert_eq!(rename["status"], "ok");
 
-    let hide = run_json([
-        "sheet",
-        path.to_str().expect("path"),
-        "hide",
-        "Dashboard",
-    ]);
+    let hide = run_json(["sheet", path.to_str().expect("path"), "hide", "Dashboard"]);
     assert_eq!(hide["status"], "ok");
 
-    let inspect = run_json([
-        "inspect",
-        path.to_str().expect("path"),
-    ]);
+    let inspect = run_json(["inspect", path.to_str().expect("path")]);
     let sheet_names = inspect["output"]["sheets"]
         .as_array()
         .expect("sheet list")
@@ -179,10 +164,7 @@ fn format_command_keeps_workbook_openable() {
     ]);
     assert_eq!(format["status"], "ok");
 
-    let inspect = run_json([
-        "inspect",
-        path.to_str().expect("path"),
-    ]);
+    let inspect = run_json(["inspect", path.to_str().expect("path")]);
     assert_eq!(inspect["status"], "ok");
 }
 
@@ -197,14 +179,8 @@ fn sheet_add_dry_run_does_not_modify_workbook() {
         "Summary,Data",
     ]);
 
-    let before = run_json([
-        "inspect",
-        path.to_str().expect("path"),
-    ]);
-    let before_len = before["output"]["sheets"]
-        .as_array()
-        .expect("sheets")
-        .len();
+    let before = run_json(["inspect", path.to_str().expect("path")]);
+    let before_len = before["output"]["sheets"].as_array().expect("sheets").len();
 
     let dry_run = run_json([
         "sheet",
@@ -216,15 +192,9 @@ fn sheet_add_dry_run_does_not_modify_workbook() {
     assert_eq!(dry_run["status"], "ok");
     assert_eq!(dry_run["commit_mode"], "dry_run");
 
-    let after = run_json([
-        "inspect",
-        path.to_str().expect("path"),
-    ]);
+    let after = run_json(["inspect", path.to_str().expect("path")]);
     assert_eq!(
-        after["output"]["sheets"]
-            .as_array()
-            .expect("sheets")
-            .len(),
+        after["output"]["sheets"].as_array().expect("sheets").len(),
         before_len
     );
 }

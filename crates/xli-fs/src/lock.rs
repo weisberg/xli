@@ -48,4 +48,3 @@ impl Drop for WorkbookLock {
         let _ = self.file.unlock();
     }
 }
-

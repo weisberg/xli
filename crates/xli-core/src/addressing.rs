@@ -230,7 +230,7 @@ fn parse_row(input: &str) -> Result<u32, AddressError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AddressError, MAX_COL_IDX, col_to_letter, letter_to_col, parse_address, parse_range,
+        col_to_letter, letter_to_col, parse_address, parse_range, AddressError, MAX_COL_IDX,
     };
 
     #[test]

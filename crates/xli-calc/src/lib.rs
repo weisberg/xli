@@ -4,4 +4,4 @@
 
 mod libreoffice;
 
-pub use libreoffice::{RecalcResult, recalc};
+pub use libreoffice::{recalc, RecalcResult};

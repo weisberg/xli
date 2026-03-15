@@ -5,5 +5,5 @@
 pub mod inspect;
 pub mod read;
 
-pub use inspect::{SheetInfo, WorkbookInfo, inspect};
-pub use read::{CellData, CellValueType, RangeData, read_cell, read_range, read_table};
+pub use inspect::{inspect, SheetInfo, WorkbookInfo};
+pub use read::{read_cell, read_range, read_table, CellData, CellValueType, RangeData};

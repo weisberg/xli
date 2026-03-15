@@ -3,11 +3,11 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::Path;
+use xli_core::XliError;
 use zip::read::ZipArchive;
 use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
-use xli_core::XliError;
 
 pub type XmlReader<'a> = Reader<Cursor<&'a [u8]>>;
 pub type XmlWriter = Writer<Vec<u8>>;
@@ -99,7 +99,10 @@ mod tests {
         let src = dir.path().join("input.xlsx");
         let dst = dir.path().join("output.xlsx");
         let mut workbook = Workbook::new();
-        workbook.add_worksheet().write_string(0, 0, "hello").expect("write");
+        workbook
+            .add_worksheet()
+            .write_string(0, 0, "hello")
+            .expect("write");
         workbook.save(&src).expect("save");
 
         let patcher = WorkbookPatcher::open(&src, &dst).expect("open");
@@ -116,7 +119,10 @@ mod tests {
         let src = dir.path().join("input.xlsx");
         let dst = dir.path().join("output.xlsx");
         let mut workbook = Workbook::new();
-        workbook.add_worksheet().write_string(0, 0, "hello").expect("write");
+        workbook
+            .add_worksheet()
+            .write_string(0, 0, "hello")
+            .expect("write");
         workbook.save(&src).expect("save");
 
         let mut patcher = WorkbookPatcher::open(&src, &dst).expect("open");
@@ -135,8 +141,10 @@ mod tests {
                         }
                         Ok(Event::Eof) => break,
                         Ok(event) => {
-                            writer.write_event(event).map_err(|error| xli_core::XliError::OoxmlCorrupt {
-                                details: error.to_string(),
+                            writer.write_event(event).map_err(|error| {
+                                xli_core::XliError::OoxmlCorrupt {
+                                    details: error.to_string(),
+                                }
                             })?;
                         }
                         Err(error) => {
@@ -170,7 +178,9 @@ mod tests {
         workbook.save(&src).expect("save");
 
         let mut patcher = WorkbookPatcher::open(&src, &dst).expect("open");
-        let error = patcher.patch_part("missing.xml", |_, _| Ok(())).expect_err("missing");
+        let error = patcher
+            .patch_part("missing.xml", |_, _| Ok(()))
+            .expect_err("missing");
         assert!(matches!(error, xli_core::XliError::OoxmlCorrupt { .. }));
     }
 }

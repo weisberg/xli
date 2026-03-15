@@ -1,10 +1,10 @@
-use calamine::{Data, Reader, Xlsx, open_workbook};
+use calamine::{open_workbook, Data, Reader, Xlsx};
 use schemars::JsonSchema;
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::io::BufReader;
 use std::path::Path;
-use xli_core::{XliError, col_to_letter, parse_address, parse_range};
+use xli_core::{col_to_letter, parse_address, parse_range, XliError};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -40,8 +40,12 @@ pub fn read_cell(path: &Path, address: &str) -> Result<CellData, XliError> {
     let cell_ref = parse_address(address).map_err(XliError::from)?;
     let mut workbook = open_xlsx(path)?;
     let sheet_name = resolve_sheet_name(&workbook, cell_ref.sheet.as_deref())?;
-    let range = workbook.worksheet_range(&sheet_name).map_err(calamine_error)?;
-    let formulas = workbook.worksheet_formula(&sheet_name).map_err(calamine_error)?;
+    let range = workbook
+        .worksheet_range(&sheet_name)
+        .map_err(calamine_error)?;
+    let formulas = workbook
+        .worksheet_formula(&sheet_name)
+        .map_err(calamine_error)?;
     let absolute = (cell_ref.row - 1, cell_ref.col_idx);
     let value = range.get_value(absolute).cloned().unwrap_or(Data::Empty);
     let formula = formulas
@@ -68,7 +72,9 @@ pub fn read_range(
     let range_ref = parse_range(range).map_err(XliError::from)?;
     let mut workbook = open_xlsx(path)?;
     let sheet_name = resolve_sheet_name(&workbook, range_ref.sheet.as_deref())?;
-    let worksheet = workbook.worksheet_range(&sheet_name).map_err(calamine_error)?;
+    let worksheet = workbook
+        .worksheet_range(&sheet_name)
+        .map_err(calamine_error)?;
 
     let start_row = range_ref.start.row - 1;
     let end_row = range_ref.end.row - 1;
@@ -261,7 +267,7 @@ fn calamine_error<E: std::fmt::Display>(error: E) -> XliError {
 
 #[cfg(test)]
 mod tests {
-    use super::{CellValueType, XliError, read_cell, read_range};
+    use super::{read_cell, read_range, CellValueType, XliError};
     use rust_xlsxwriter::Workbook;
     use serde_json::json;
     use tempfile::tempdir;

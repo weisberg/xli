@@ -34,4 +34,3 @@ pub fn fingerprint(path: &Path) -> Result<String, XliError> {
 
     Ok(format!("sha256:{:x}", hasher.finalize()))
 }
-

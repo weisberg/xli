@@ -70,12 +70,7 @@ pub fn scan_errors(path: &Path) -> Result<ValidateOutput, xli_core::XliError> {
 
         for row in range.start.row..=range.end.row {
             for col_idx in range.start.col_idx..=range.end.col_idx {
-                let address = format!(
-                    "{}!{}{}",
-                    sheet.name,
-                    xli_core::col_to_letter(col_idx),
-                    row
-                );
+                let address = format!("{}!{}{}", sheet.name, xli_core::col_to_letter(col_idx), row);
                 let cell = xli_read::read_cell(path, &address)?;
                 scanned_cells += 1;
 

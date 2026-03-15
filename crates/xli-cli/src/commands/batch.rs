@@ -6,7 +6,7 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use xli_core::BatchOp;
-use xli_fs::{AtomicCommitOptions, atomic_commit_with_options};
+use xli_fs::{atomic_commit_with_options, AtomicCommitOptions};
 use xli_ooxml::{BatchSummary, UMYA_FALLBACK_WARNING};
 
 use crate::output;
@@ -88,15 +88,20 @@ pub fn run(args: BatchArgs, human: bool) -> Result<bool> {
             ),
             human,
         ),
-        Err(error) => output::emit(&output::error_envelope::<BatchOutput>("batch", Some(input), error), human),
+        Err(error) => output::emit(
+            &output::error_envelope::<BatchOutput>("batch", Some(input), error),
+            human,
+        ),
     }
 }
 
 fn parse_ops(contents: &str) -> Result<Vec<BatchOp>, xli_core::XliError> {
     let mut ops = Vec::new();
     for line in contents.lines().filter(|line| !line.trim().is_empty()) {
-        let op = serde_json::from_str::<BatchOp>(line).map_err(|error| xli_core::XliError::CliParseError {
-            message: error.to_string(),
+        let op = serde_json::from_str::<BatchOp>(line).map_err(|error| {
+            xli_core::XliError::CliParseError {
+                message: error.to_string(),
+            }
         })?;
         ops.push(op);
     }

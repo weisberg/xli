@@ -36,7 +36,12 @@ where
     F: FnOnce(&Path, &Path) -> Result<T, XliError>,
     T: Serialize,
 {
-    atomic_commit_with_options(path, expect_fingerprint, AtomicCommitOptions::default(), mutate)
+    atomic_commit_with_options(
+        path,
+        expect_fingerprint,
+        AtomicCommitOptions::default(),
+        mutate,
+    )
 }
 
 /// Perform an atomic commit with additional options such as dry-run support.
@@ -81,7 +86,9 @@ where
     // by the closure (which opens tmp_path independently via its own fd), so
     // syncing staged.as_file() would be a no-op that provides a false
     // durability guarantee. (Issue #19)
-    File::open(&tmp_path).and_then(|f| f.sync_all()).map_err(io_error)?;
+    File::open(&tmp_path)
+        .and_then(|f| f.sync_all())
+        .map_err(io_error)?;
 
     let fingerprint_after = fingerprint(&tmp_path)?;
     let file_size_before = path.metadata().map_err(io_error)?.len();
@@ -145,8 +152,8 @@ fn zip_error(error: zip::result::ZipError) -> XliError {
 #[cfg(test)]
 mod tests {
     use super::{
-        AtomicCommitOptions, atomic_commit, atomic_commit_with_options, fingerprint,
-        validate_ooxml_file,
+        atomic_commit, atomic_commit_with_options, fingerprint, validate_ooxml_file,
+        AtomicCommitOptions,
     };
     use rust_xlsxwriter::Workbook;
     use std::fs;
@@ -155,7 +162,7 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use std::thread;
     use std::time::Duration;
-    use tempfile::{NamedTempFile, tempdir};
+    use tempfile::{tempdir, NamedTempFile};
     use xli_core::XliError;
 
     #[test]
@@ -201,11 +208,7 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("book.txt");
         fs::write(&path, "before").expect("write");
-        let before_entries = dir
-            .path()
-            .read_dir()
-            .expect("read_dir")
-            .count();
+        let before_entries = dir.path().read_dir().expect("read_dir").count();
 
         let error = atomic_commit(&path, None, |_, dst| {
             fs::write(dst, "temp").expect("write");
@@ -218,11 +221,7 @@ mod tests {
 
         assert!(matches!(error, XliError::WriteConflict { .. }));
         assert_eq!(fs::read_to_string(&path).expect("read"), "before");
-        let after_entries = dir
-            .path()
-            .read_dir()
-            .expect("read_dir")
-            .count();
+        let after_entries = dir.path().read_dir().expect("read_dir").count();
         assert_eq!(before_entries, after_entries);
     }
 
@@ -253,8 +252,8 @@ mod tests {
     fn missing_file_returns_file_not_found() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("missing.txt");
-        let error = atomic_commit(&path, None, |_, _| Ok::<_, XliError>(()))
-            .expect_err("missing file");
+        let error =
+            atomic_commit(&path, None, |_, _| Ok::<_, XliError>(())).expect_err("missing file");
         assert!(matches!(error, XliError::FileNotFound { .. }));
     }
 

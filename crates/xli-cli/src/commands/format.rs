@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use std::path::PathBuf;
 use xli_core::StyleSpec;
-use xli_fs::{AtomicCommitOptions, atomic_commit_with_options};
+use xli_fs::{atomic_commit_with_options, AtomicCommitOptions};
 use xli_ooxml::UMYA_FALLBACK_WARNING;
 
 use crate::output;
@@ -90,7 +90,10 @@ pub fn run(args: FormatArgs, human: bool) -> Result<bool> {
             ),
             human,
         ),
-        Err(error) => output::emit(&output::error_envelope::<FormatOutput>("format", Some(input), error), human),
+        Err(error) => output::emit(
+            &output::error_envelope::<FormatOutput>("format", Some(input), error),
+            human,
+        ),
     }
 }
 

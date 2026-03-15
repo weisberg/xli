@@ -53,11 +53,8 @@ pub fn run(args: LintArgs, human: bool) -> Result<bool> {
         "severity": args.severity,
     });
 
-    let envelope = match lint_workbook(
-        &args.file,
-        args.rules.as_deref(),
-        args.severity.as_deref(),
-    ) {
+    let envelope = match lint_workbook(&args.file, args.rules.as_deref(), args.severity.as_deref())
+    {
         Ok(output_data) => {
             let mut envelope = output::ok_envelope(
                 "lint",
@@ -71,7 +68,11 @@ pub fn run(args: LintArgs, human: bool) -> Result<bool> {
                 CommitStats::default(),
             );
 
-            if !envelope.output.as_ref().is_some_and(|output| output.issues.is_empty()) {
+            if !envelope
+                .output
+                .as_ref()
+                .is_some_and(|output| output.issues.is_empty())
+            {
                 envelope.status = Status::IssuesFound;
             }
             envelope
@@ -107,12 +108,7 @@ pub fn lint_workbook(
 
         for row in range.start.row..=range.end.row {
             for col_idx in range.start.col_idx..=range.end.col_idx {
-                let address = format!(
-                    "{}!{}{}",
-                    sheet.name,
-                    xli_core::col_to_letter(col_idx),
-                    row
-                );
+                let address = format!("{}!{}{}", sheet.name, xli_core::col_to_letter(col_idx), row);
                 let cell = xli_read::read_cell(path, &address)?;
 
                 scanned.push(ScannedCell {
@@ -125,17 +121,21 @@ pub fn lint_workbook(
         }
 
         issues.extend(lint_formulas(&scanned));
-        issues.extend(lint_duplicate_headers(
-            &sheet.name,
-            &dimensions,
-            path,
-        )?);
+        issues.extend(lint_duplicate_headers(&sheet.name, &dimensions, path)?);
     }
 
     let filtered = issues
         .into_iter()
-        .filter(|issue| include_rules.as_ref().is_none_or(|rules| rules.contains(issue.rule.as_str())))
-        .filter(|issue| include_severity.as_ref().is_none_or(|severity| severity == issue.severity.as_str()))
+        .filter(|issue| {
+            include_rules
+                .as_ref()
+                .is_none_or(|rules| rules.contains(issue.rule.as_str()))
+        })
+        .filter(|issue| {
+            include_severity
+                .as_ref()
+                .is_none_or(|severity| severity == issue.severity.as_str())
+        })
         .collect::<Vec<_>>();
 
     Ok(LintOutput { issues: filtered })
@@ -194,7 +194,10 @@ fn lint_formulas(cells: &[ScannedCell]) -> Vec<LintIssue> {
         }
 
         let local_addr = format!("{}{}", cell.col, cell.row);
-        if formula.to_ascii_uppercase().contains(&local_addr.to_ascii_uppercase()) {
+        if formula
+            .to_ascii_uppercase()
+            .contains(&local_addr.to_ascii_uppercase())
+        {
             issues.push(LintIssue {
                 rule: "circular-ref-suspect".to_string(),
                 severity: "error".to_string(),
@@ -223,12 +226,13 @@ fn lint_duplicate_headers(
     dimensions: &str,
     path: &Path,
 ) -> Result<Vec<LintIssue>, xli_core::XliError> {
-    let range = xli_core::parse_range(&format!("{}!{dimensions}", sheet_name)).map_err(|error| {
-        xli_core::XliError::TemplateParamInvalid {
-            parameter: "dimensions".to_string(),
-            details: error.to_string(),
-        }
-    })?;
+    let range =
+        xli_core::parse_range(&format!("{}!{dimensions}", sheet_name)).map_err(|error| {
+            xli_core::XliError::TemplateParamInvalid {
+                parameter: "dimensions".to_string(),
+                details: error.to_string(),
+            }
+        })?;
     let header_range = format!(
         "{sheet_name}!{}{}:{}{}",
         range.start.col, range.start.row, range.end.col, range.start.row
@@ -238,8 +242,17 @@ fn lint_duplicate_headers(
     let mut seen: HashMap<String, Vec<String>> = HashMap::new();
     let mut col = range.start.col_idx;
     for value in row.values() {
-        if let Some(text) = value.as_str().map(str::trim).filter(|text| !text.is_empty()) {
-            let address = format!("{}!{}{}", sheet_name, xli_core::col_to_letter(col), range.start.row);
+        if let Some(text) = value
+            .as_str()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+        {
+            let address = format!(
+                "{}!{}{}",
+                sheet_name,
+                xli_core::col_to_letter(col),
+                range.start.row
+            );
             seen.entry(text.to_string()).or_default().push(address);
         }
         col += 1;

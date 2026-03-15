@@ -32,9 +32,7 @@ pub fn create_from_csv(csv_path: &Path, out_path: &Path, sheet_name: &str) -> Re
         .has_headers(false)
         .from_path(csv_path)
         .map_err(|error| match error.kind() {
-            csv::ErrorKind::Io(io_err)
-                if io_err.kind() == std::io::ErrorKind::NotFound =>
-            {
+            csv::ErrorKind::Io(io_err) if io_err.kind() == std::io::ErrorKind::NotFound => {
                 XliError::FileNotFound {
                     path: csv_path.display().to_string(),
                 }
@@ -66,15 +64,17 @@ pub fn create_from_csv(csv_path: &Path, out_path: &Path, sheet_name: &str) -> Re
         }
     }
 
-    workbook.save(out_path).map_err(|error| XliError::OoxmlCorrupt {
-        details: error.to_string(),
-    })
+    workbook
+        .save(out_path)
+        .map_err(|error| XliError::OoxmlCorrupt {
+            details: error.to_string(),
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{create_blank, create_from_csv};
-    use calamine::{Reader, Xlsx, open_workbook};
+    use calamine::{open_workbook, Reader, Xlsx};
     use std::fs;
     use tempfile::tempdir;
 
@@ -100,11 +100,15 @@ mod tests {
         let mut workbook: Xlsx<_> = open_workbook(&out).expect("open");
         let range = workbook.worksheet_range("Import").expect("range");
         assert_eq!(
-            range.get_value((0, 0)).map(|cell: &calamine::Data| cell.to_string()),
+            range
+                .get_value((0, 0))
+                .map(|cell: &calamine::Data| cell.to_string()),
             Some("name".to_string())
         );
         assert_eq!(
-            range.get_value((1, 0)).map(|cell: &calamine::Data| cell.to_string()),
+            range
+                .get_value((1, 0))
+                .map(|cell: &calamine::Data| cell.to_string()),
             Some("foo".to_string())
         );
     }
@@ -123,12 +127,16 @@ mod tests {
         let mut workbook: Xlsx<_> = open_workbook(&out).expect("open");
         let range = workbook.worksheet_range("Data").expect("range");
         assert_eq!(
-            range.get_value((1, 0)).map(|cell: &calamine::Data| cell.to_string()),
+            range
+                .get_value((1, 0))
+                .map(|cell: &calamine::Data| cell.to_string()),
             Some("Smith, John".to_string()),
             "quoted field with comma should be a single cell"
         );
         assert_eq!(
-            range.get_value((1, 1)).map(|cell: &calamine::Data| cell.to_string()),
+            range
+                .get_value((1, 1))
+                .map(|cell: &calamine::Data| cell.to_string()),
             Some("New York".to_string())
         );
     }

@@ -59,11 +59,18 @@ impl SharedStringTable {
     pub fn serialize(&self) -> Result<Vec<u8>, XliError> {
         let mut writer = Writer::new(Vec::new());
         writer
-            .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))
+            .write_event(Event::Decl(BytesDecl::new(
+                "1.0",
+                Some("UTF-8"),
+                Some("yes"),
+            )))
             .map_err(xml_error)?;
 
         let mut sst = BytesStart::new("sst");
-        sst.push_attribute(("xmlns", "http://schemas.openxmlformats.org/spreadsheetml/2006/main"));
+        sst.push_attribute((
+            "xmlns",
+            "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+        ));
         let count = self.strings.len().to_string();
         sst.push_attribute(("count", count.as_str()));
         sst.push_attribute(("uniqueCount", count.as_str()));

@@ -10,4 +10,3 @@ pub fn stage_temp_file(parent_dir: &Path) -> Result<NamedTempFile, XliError> {
         details: Some(error.to_string()),
     })
 }
-

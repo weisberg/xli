@@ -39,8 +39,12 @@ pub fn run(args: ReadArgs, human: bool) -> Result<bool> {
     });
 
     if let Some(table_name) = args.table.as_deref() {
-        return match xli_read::read_table(&args.file, table_name, Some(args.limit), Some(args.offset))
-        {
+        return match xli_read::read_table(
+            &args.file,
+            table_name,
+            Some(args.limit),
+            Some(args.offset),
+        ) {
             Ok(output_data) => output::emit(
                 &output::ok_envelope(
                     "read",
@@ -55,7 +59,10 @@ pub fn run(args: ReadArgs, human: bool) -> Result<bool> {
                 ),
                 human,
             ),
-            Err(error) => output::emit(&output::error_envelope::<RangeData>("read", Some(input), error), human),
+            Err(error) => output::emit(
+                &output::error_envelope::<RangeData>("read", Some(input), error),
+                human,
+            ),
         };
     }
 
@@ -83,7 +90,10 @@ pub fn run(args: ReadArgs, human: bool) -> Result<bool> {
                     ),
                     human,
                 ),
-                Err(error) => output::emit(&output::error_envelope::<RangeData>("read", Some(input), error), human),
+                Err(error) => output::emit(
+                    &output::error_envelope::<RangeData>("read", Some(input), error),
+                    human,
+                ),
             };
         }
 
@@ -109,7 +119,10 @@ pub fn run(args: ReadArgs, human: bool) -> Result<bool> {
                     human,
                 )
             }
-            Err(error) => output::emit(&output::error_envelope::<CellData>("read", Some(input), error), human),
+            Err(error) => output::emit(
+                &output::error_envelope::<CellData>("read", Some(input), error),
+                human,
+            ),
         };
     }
 

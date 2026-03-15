@@ -3,8 +3,11 @@
 //! Schema emission helpers for XLI commands and result types.
 
 use schemars::schema_for;
-use serde_json::{Value, json};
-use xli_core::{BatchOp, CommitMode, CommitStats, RepairSuggestion, ResponseEnvelope, Status, StyleSpec, XliError};
+use serde_json::{json, Value};
+use xli_core::{
+    BatchOp, CommitMode, CommitStats, RepairSuggestion, ResponseEnvelope, Status, StyleSpec,
+    XliError,
+};
 use xli_read::{CellData, RangeData, SheetInfo, WorkbookInfo};
 
 pub fn emit_full_schema() -> Value {
@@ -81,18 +84,42 @@ pub fn emit_openapi() -> Value {
 
 fn command_schema(command: &str) -> Value {
     match command {
-        "inspect" => json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"}}}),
-        "read" => json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"address":{"type":"string"},"range":{"type":"string"},"table":{"type":"string"},"limit":{"type":"integer"},"offset":{"type":"integer"},"headers":{"type":"boolean"},"formulas":{"type":"boolean"}}}),
-        "write" => json!({"type":"object","required":["file","address"],"properties":{"file":{"type":"string"},"address":{"type":"string"},"value":{},"formula":{"type":"string"},"sheet":{"type":"string"},"expect_fingerprint":{"type":"string"},"dry_run":{"type":"boolean"}}}),
-        "format" => json!({"type":"object","required":["file","range"],"properties":{"file":{"type":"string"},"range":{"type":"string"},"bold":{"type":"boolean"},"italic":{"type":"boolean"},"font_color":{"type":"string"},"fill":{"type":"string"},"number_format":{"type":"string"},"column_width":{"type":"number"},"dry_run":{"type":"boolean"}}}),
-        "sheet" => json!({"type":"object","required":["file","action"],"properties":{"file":{"type":"string"},"action":{"type":"string"}}}),
-        "batch" => json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"stdin":{"type":"boolean"},"file_input":{"type":"string"},"dry_run":{"type":"boolean"}}}),
-        "create" => json!({"type":"object","required":["name"],"properties":{"name":{"type":"string"},"sheets":{"type":"string"},"from_csv":{"type":"string"}}}),
-        "lint" => json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"rules":{"type":"string"},"severity":{"type":"string"}}}),
-        "recalc" => json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"timeout":{"type":"integer"}}}),
-        "validate" => json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"}}}),
-        "doctor" => json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"skip_recalc":{"type":"boolean"},"timeout":{"type":"integer"}}}),
-        "schema" => json!({"type":"object","properties":{"command":{"type":"string"},"openapi":{"type":"boolean"}}}),
+        "inspect" => {
+            json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"}}})
+        }
+        "read" => {
+            json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"address":{"type":"string"},"range":{"type":"string"},"table":{"type":"string"},"limit":{"type":"integer"},"offset":{"type":"integer"},"headers":{"type":"boolean"},"formulas":{"type":"boolean"}}})
+        }
+        "write" => {
+            json!({"type":"object","required":["file","address"],"properties":{"file":{"type":"string"},"address":{"type":"string"},"value":{},"formula":{"type":"string"},"sheet":{"type":"string"},"expect_fingerprint":{"type":"string"},"dry_run":{"type":"boolean"}}})
+        }
+        "format" => {
+            json!({"type":"object","required":["file","range"],"properties":{"file":{"type":"string"},"range":{"type":"string"},"bold":{"type":"boolean"},"italic":{"type":"boolean"},"font_color":{"type":"string"},"fill":{"type":"string"},"number_format":{"type":"string"},"column_width":{"type":"number"},"dry_run":{"type":"boolean"}}})
+        }
+        "sheet" => {
+            json!({"type":"object","required":["file","action"],"properties":{"file":{"type":"string"},"action":{"type":"string"}}})
+        }
+        "batch" => {
+            json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"stdin":{"type":"boolean"},"file_input":{"type":"string"},"dry_run":{"type":"boolean"}}})
+        }
+        "create" => {
+            json!({"type":"object","required":["name"],"properties":{"name":{"type":"string"},"sheets":{"type":"string"},"from_csv":{"type":"string"}}})
+        }
+        "lint" => {
+            json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"rules":{"type":"string"},"severity":{"type":"string"}}})
+        }
+        "recalc" => {
+            json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"timeout":{"type":"integer"}}})
+        }
+        "validate" => {
+            json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"}}})
+        }
+        "doctor" => {
+            json!({"type":"object","required":["file"],"properties":{"file":{"type":"string"},"skip_recalc":{"type":"boolean"},"timeout":{"type":"integer"}}})
+        }
+        "schema" => {
+            json!({"type":"object","properties":{"command":{"type":"string"},"openapi":{"type":"boolean"}}})
+        }
         _ => json!({"type":"object"}),
     }
 }
