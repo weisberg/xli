@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
@@ -7,12 +8,19 @@ use xli_core::{BatchOp, SheetAction, StyleSpec, XliError, col_to_letter, parse_a
 pub const UMYA_FALLBACK_WARNING: &str =
     "Used umya-spreadsheet fallback for workbook mutation. Some workbook artifacts may have been modified.";
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct BatchSummary {
     pub ops_executed: usize,
     pub cells_written: usize,
     pub formulas_written: usize,
     pub cells_formatted: usize,
+}
+
+/// Typed return from apply_write so callers cannot accidentally ignore the
+/// needs_recalc signal. (Issue #22)
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct WriteResult {
+    pub needs_recalc: bool,
 }
 
 pub fn apply_write(
@@ -21,8 +29,11 @@ pub fn apply_write(
     address: &str,
     value: Option<Value>,
     formula: Option<String>,
-) -> Result<bool, XliError> {
-    mutate_workbook(src, dst, |book| write_into_book(book, address, value, formula))
+) -> Result<WriteResult, XliError> {
+    mutate_workbook(src, dst, |book| {
+        let needs_recalc = write_into_book(book, address, value, formula)?;
+        Ok(WriteResult { needs_recalc })
+    })
 }
 
 pub fn apply_format(src: &Path, dst: &Path, range: &str, style: &StyleSpec) -> Result<(), XliError> {
@@ -201,8 +212,35 @@ fn format_in_book(book: &mut Spreadsheet, range: &str, style: &StyleSpec) -> Res
 
 fn sheet_action_in_book(book: &mut Spreadsheet, action: &SheetAction) -> Result<(), XliError> {
     match action {
-        SheetAction::Add { name, .. } => {
+        SheetAction::Add { name, after } => {
             book.new_sheet(name).map_err(sheet_action_error)?;
+            // Respect the `after` positioning parameter. umya always appends at
+            // the end, so when `after` is specified we reorder immediately after
+            // adding. Previously this field was silently ignored. (Issue #23)
+            if let Some(after_name) = after {
+                let all_names: Vec<String> = book
+                    .get_sheet_collection()
+                    .iter()
+                    .map(|s| s.get_name().to_string())
+                    .collect();
+                let after_idx = all_names
+                    .iter()
+                    .position(|n| n == after_name)
+                    .ok_or_else(|| XliError::SheetNotFound {
+                        sheet: after_name.clone(),
+                    })?;
+                // Build the new order: everything up to and including after_idx,
+                // then the new sheet, then everything else (excluding the new sheet
+                // which was appended at the end).
+                let new_sheet_name = name.clone();
+                let mut new_order: Vec<String> = all_names
+                    .iter()
+                    .filter(|n| n.as_str() != new_sheet_name)
+                    .cloned()
+                    .collect();
+                new_order.insert(after_idx + 1, new_sheet_name);
+                reorder_sheets(book, &new_order)?;
+            }
         }
         SheetAction::Delete { name } => {
             book.remove_sheet_by_name(name).map_err(sheet_action_error)?;
@@ -309,7 +347,24 @@ fn normalize_argb(color: &str) -> String {
 
 fn cells_in_range(range: &str) -> Result<u32, XliError> {
     let range_ref = parse_range(range).map_err(XliError::from)?;
-    let width = range_ref.end.col_idx - range_ref.start.col_idx + 1;
-    let height = range_ref.end.row - range_ref.start.row + 1;
+    // Use checked_sub to catch inverted ranges (end < start). Plain u32
+    // subtraction panics in debug builds and silently wraps in release,
+    // producing a nonsense cell count. (Issue #20)
+    let width = range_ref
+        .end
+        .col_idx
+        .checked_sub(range_ref.start.col_idx)
+        .ok_or_else(|| XliError::InvalidCellAddress {
+            address: range.to_string(),
+        })?
+        + 1;
+    let height = range_ref
+        .end
+        .row
+        .checked_sub(range_ref.start.row)
+        .ok_or_else(|| XliError::InvalidCellAddress {
+            address: range.to_string(),
+        })?
+        + 1;
     Ok(width * height)
 }

@@ -31,7 +31,8 @@ fn inspect_missing_file_returns_structured_error() {
         .output()
         .expect("run inspect");
 
-    assert!(output.status.success());
+    // Error envelope → non-zero exit code. (Issue #26)
+    assert!(!output.status.success());
     let json: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("valid json output");
     assert_eq!(json["status"], "error");

@@ -76,7 +76,12 @@ where
     let tmp_path = staged.path().to_path_buf();
     let output = mutate(path, &tmp_path)?;
     validate_ooxml_file(&tmp_path)?;
-    staged.as_file().sync_all().map_err(io_error)?;
+    // Open a fresh fd on the path the mutate closure actually wrote to and
+    // fsync it. The NamedTempFile's internal File handle was never written to
+    // by the closure (which opens tmp_path independently via its own fd), so
+    // syncing staged.as_file() would be a no-op that provides a false
+    // durability guarantee. (Issue #19)
+    File::open(&tmp_path).and_then(|f| f.sync_all()).map_err(io_error)?;
 
     let fingerprint_after = fingerprint(&tmp_path)?;
     let file_size_before = path.metadata().map_err(io_error)?.len();

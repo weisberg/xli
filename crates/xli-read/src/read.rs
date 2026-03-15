@@ -1,11 +1,12 @@
 use calamine::{Data, Reader, Xlsx, open_workbook};
+use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use std::io::BufReader;
 use std::path::Path;
 use xli_core::{XliError, col_to_letter, parse_address, parse_range};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CellValueType {
     Number,
@@ -16,7 +17,7 @@ pub enum CellValueType {
     Error,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct CellData {
     pub address: String,
     pub value: Value,
@@ -25,7 +26,7 @@ pub struct CellData {
     pub format: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct RangeData {
     pub range: String,
     pub headers: Option<Vec<String>>,

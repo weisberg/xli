@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::path::PathBuf;
 use xli_core::SheetAction;
@@ -17,7 +18,11 @@ pub struct SheetArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum SheetCommand {
-    Add { name: String },
+    Add {
+        name: String,
+        #[arg(long)]
+        after: Option<String>,
+    },
     Remove { name: String },
     Rename { from: String, #[arg(long)] to: String },
     Copy { from: String, #[arg(long)] to: String },
@@ -26,16 +31,16 @@ pub enum SheetCommand {
     Unhide { name: String },
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct SheetOutput {
     action: String,
 }
 
-pub fn run(args: SheetArgs, human: bool) -> Result<()> {
+pub fn run(args: SheetArgs, human: bool) -> Result<bool> {
     let action = match &args.action {
-        SheetCommand::Add { name } => SheetAction::Add {
+        SheetCommand::Add { name, after } => SheetAction::Add {
             name: name.clone(),
-            after: None,
+            after: after.clone(),
         },
         SheetCommand::Remove { name } => SheetAction::Delete { name: name.clone() },
         SheetCommand::Rename { from, to } => SheetAction::Rename {

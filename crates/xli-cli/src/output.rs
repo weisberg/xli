@@ -1,11 +1,16 @@
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::io::{self, Write};
 use xli_core::{CommitMode, CommitStats, ResponseEnvelope, Status, XliError};
 
 /// Emit a response envelope in JSON or minimal human-readable text form.
-pub fn emit<T>(envelope: &ResponseEnvelope<T>, human: bool) -> anyhow::Result<()>
+///
+/// Returns `true` when the envelope carries `Status::Error` so callers can
+/// propagate a non-zero exit code without having to inspect the envelope
+/// again. (Issue #26)
+pub fn emit<T>(envelope: &ResponseEnvelope<T>, human: bool) -> anyhow::Result<bool>
 where
-    T: Serialize,
+    T: Serialize + JsonSchema,
 {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
@@ -27,7 +32,7 @@ where
         writeln!(handle)?;
     }
 
-    Ok(())
+    Ok(envelope.status == Status::Error)
 }
 
 pub fn ok_envelope<T>(
@@ -42,7 +47,7 @@ pub fn ok_envelope<T>(
     stats: CommitStats,
 ) -> ResponseEnvelope<T>
 where
-    T: Serialize,
+    T: Serialize + JsonSchema,
 {
     ResponseEnvelope {
         status: Status::Ok,
@@ -66,7 +71,7 @@ pub fn error_envelope<T>(
     error: XliError,
 ) -> ResponseEnvelope<T>
 where
-    T: Serialize,
+    T: Serialize + JsonSchema,
 {
     ResponseEnvelope {
         status: Status::Error,

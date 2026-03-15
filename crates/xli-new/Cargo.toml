@@ -6,7 +6,7 @@ publish.workspace = true
 version.workspace = true
 
 [dependencies]
-anyhow.workspace = true
+csv.workspace = true
 rust_xlsxwriter.workspace = true
 xli-core = { path = "../xli-core" }
 

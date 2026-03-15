@@ -7,4 +7,9 @@ version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+schemars.workspace = true
+serde.workspace = true
 xli-core = { path = "../xli-core" }
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,4 +1,5 @@
 use calamine::{Reader, SheetType, Xlsx, open_workbook};
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::BufReader;
@@ -7,7 +8,7 @@ use xli_core::{XliError, col_to_letter, parse_address, parse_range};
 use xli_fs::fingerprint;
 
 /// High-level workbook metadata returned by `xli inspect`.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct WorkbookInfo {
     pub file: String,
     pub size_bytes: u64,
@@ -18,7 +19,7 @@ pub struct WorkbookInfo {
 }
 
 /// High-level per-sheet metadata returned by `xli inspect`.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct SheetInfo {
     pub name: String,
     pub index: u32,
@@ -29,7 +30,10 @@ pub struct SheetInfo {
     pub tables: Vec<String>,
     pub named_ranges: Vec<String>,
     pub merged_regions: Vec<String>,
-    pub has_charts: bool,
+    /// True only when this sheet *is* a chart sheet (the entire sheet is one
+    /// chart). Regular worksheets containing embedded chart objects will be
+    /// false — they are WorkSheet type, not ChartSheet. (Issue #25)
+    pub is_chart_sheet: bool,
 }
 
 /// Inspect an OOXML workbook and summarize its structure.
@@ -95,7 +99,7 @@ pub fn inspect(path: &Path) -> Result<WorkbookInfo, XliError> {
             .filter(|(_, formula)| formula_targets_sheet(formula, name))
             .map(|(defined_name, _)| defined_name.clone())
             .collect();
-        let has_charts = metadata
+        let is_chart_sheet = metadata
             .get(index)
             .map(|sheet| sheet.typ == SheetType::ChartSheet)
             .unwrap_or(false);
@@ -110,7 +114,7 @@ pub fn inspect(path: &Path) -> Result<WorkbookInfo, XliError> {
             tables,
             named_ranges,
             merged_regions,
-            has_charts,
+            is_chart_sheet,
         });
     }
 

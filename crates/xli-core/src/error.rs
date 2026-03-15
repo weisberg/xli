@@ -1,10 +1,11 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::addressing::AddressError;
 
 /// Structured error codes emitted by XLI commands.
-#[derive(Clone, Debug, PartialEq, Eq, Error, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Error, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "code", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum XliError {
     #[error("Workbook file not found: {path}")]

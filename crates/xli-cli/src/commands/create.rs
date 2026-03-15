@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::path::PathBuf;
 
@@ -14,13 +15,13 @@ pub struct CreateArgs {
     pub from_csv: Option<PathBuf>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct CreateOutput {
     file: String,
     sheets_created: usize,
 }
 
-pub fn run(args: CreateArgs, human: bool) -> Result<()> {
+pub fn run(args: CreateArgs, human: bool) -> Result<bool> {
     let input = serde_json::json!({
         "name": args.name,
         "sheets": args.sheets,

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::path::PathBuf;
 use xli_core::StyleSpec;
@@ -32,12 +33,12 @@ pub struct FormatArgs {
     pub dry_run: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct FormatOutput {
     cells_formatted: u32,
 }
 
-pub fn run(args: FormatArgs, human: bool) -> Result<()> {
+pub fn run(args: FormatArgs, human: bool) -> Result<bool> {
     let range = qualify_reference(&args.range, args.sheet.as_deref());
     let style = StyleSpec {
         bold: args.bold.then_some(true),
@@ -103,6 +104,22 @@ fn qualify_reference(reference: &str, sheet: Option<&str>) -> String {
 
 fn formatted_cells(range: &str) -> Result<u32, xli_core::XliError> {
     let range_ref = xli_core::parse_range(range).map_err(xli_core::XliError::from)?;
-    Ok((range_ref.end.col_idx - range_ref.start.col_idx + 1)
-        * (range_ref.end.row - range_ref.start.row + 1))
+    // Use checked_sub to avoid u32 underflow on inverted ranges. (Issue #20)
+    let width = range_ref
+        .end
+        .col_idx
+        .checked_sub(range_ref.start.col_idx)
+        .ok_or_else(|| xli_core::XliError::InvalidCellAddress {
+            address: range.to_string(),
+        })?
+        + 1;
+    let height = range_ref
+        .end
+        .row
+        .checked_sub(range_ref.start.row)
+        .ok_or_else(|| xli_core::XliError::InvalidCellAddress {
+            address: range.to_string(),
+        })?
+        + 1;
+    Ok(width * height)
 }

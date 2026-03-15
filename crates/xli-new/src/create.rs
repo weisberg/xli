@@ -1,5 +1,4 @@
 use rust_xlsxwriter::Workbook;
-use std::fs;
 use std::path::Path;
 use xli_core::XliError;
 
@@ -26,14 +25,24 @@ pub fn create_blank(path: &Path, sheets: &[String]) -> Result<(), XliError> {
 }
 
 pub fn create_from_csv(csv_path: &Path, out_path: &Path, sheet_name: &str) -> Result<(), XliError> {
-    let contents = fs::read_to_string(csv_path).map_err(|error| match error.kind() {
-        std::io::ErrorKind::NotFound => XliError::FileNotFound {
-            path: csv_path.display().to_string(),
-        },
-        _ => XliError::OoxmlCorrupt {
-            details: error.to_string(),
-        },
-    })?;
+    // Use the csv crate for RFC 4180-compliant parsing. The previous
+    // line.split(',') approach silently broke quoted fields containing commas
+    // (e.g. "Smith, John" would be split into two cells). (Issue #24)
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_path(csv_path)
+        .map_err(|error| match error.kind() {
+            csv::ErrorKind::Io(io_err)
+                if io_err.kind() == std::io::ErrorKind::NotFound =>
+            {
+                XliError::FileNotFound {
+                    path: csv_path.display().to_string(),
+                }
+            }
+            _ => XliError::OoxmlCorrupt {
+                details: error.to_string(),
+            },
+        })?;
 
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
@@ -44,10 +53,13 @@ pub fn create_from_csv(csv_path: &Path, out_path: &Path, sheet_name: &str) -> Re
             details: Some(error.to_string()),
         })?;
 
-    for (row_idx, line) in contents.lines().enumerate() {
-        for (col_idx, cell) in line.split(',').enumerate() {
+    for (row_idx, record) in reader.records().enumerate() {
+        let record = record.map_err(|error| XliError::OoxmlCorrupt {
+            details: error.to_string(),
+        })?;
+        for (col_idx, field) in record.iter().enumerate() {
             worksheet
-                .write_string(row_idx as u32, col_idx as u16, cell)
+                .write_string(row_idx as u32, col_idx as u16, field)
                 .map_err(|error| XliError::OoxmlCorrupt {
                     details: error.to_string(),
                 })?;
@@ -94,6 +106,30 @@ mod tests {
         assert_eq!(
             range.get_value((1, 0)).map(|cell: &calamine::Data| cell.to_string()),
             Some("foo".to_string())
+        );
+    }
+
+    #[test]
+    fn csv_quoted_fields_with_commas_are_single_cells() {
+        // Regression test for Issue #24: split(',') would break "Smith, John"
+        // into two cells. The csv crate handles RFC 4180 quoting correctly.
+        let dir = tempdir().expect("tempdir");
+        let csv = dir.path().join("quoted.csv");
+        let out = dir.path().join("quoted.xlsx");
+        fs::write(&csv, "name,city\n\"Smith, John\",\"New York\"\n").expect("write");
+
+        create_from_csv(&csv, &out, "Data").expect("create");
+
+        let mut workbook: Xlsx<_> = open_workbook(&out).expect("open");
+        let range = workbook.worksheet_range("Data").expect("range");
+        assert_eq!(
+            range.get_value((1, 0)).map(|cell: &calamine::Data| cell.to_string()),
+            Some("Smith, John".to_string()),
+            "quoted field with comma should be a single cell"
+        );
+        assert_eq!(
+            range.get_value((1, 1)).map(|cell: &calamine::Data| cell.to_string()),
+            Some("New York".to_string())
         );
     }
 }

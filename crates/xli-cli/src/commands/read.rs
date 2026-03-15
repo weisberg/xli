@@ -25,7 +25,7 @@ pub struct ReadArgs {
     pub headers: bool,
 }
 
-pub fn run(args: ReadArgs, human: bool) -> Result<()> {
+pub fn run(args: ReadArgs, human: bool) -> Result<bool> {
     let input = serde_json::json!({
         "file": args.file,
         "address": args.address,

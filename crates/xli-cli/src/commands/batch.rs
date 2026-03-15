@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::fs;
 use std::io::Read;
@@ -23,14 +24,14 @@ pub struct BatchArgs {
     pub dry_run: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct BatchOutput {
     ops_executed: usize,
     ops_failed: usize,
     stats: BatchSummary,
 }
 
-pub fn run(args: BatchArgs, human: bool) -> Result<()> {
+pub fn run(args: BatchArgs, human: bool) -> Result<bool> {
     let contents = if args.stdin {
         let mut buffer = String::new();
         std::io::stdin().read_to_string(&mut buffer)?;

@@ -39,3 +39,13 @@ impl WorkbookLock {
     }
 }
 
+impl Drop for WorkbookLock {
+    fn drop(&mut self) {
+        // Explicitly unlock rather than relying on the OS to release the lock
+        // when the File handle closes. On Unix (flock) the implicit release is
+        // reliable, but on Windows (LockFile/UnlockFile via fs4) explicit
+        // unlocking is the safe cross-platform contract. (Issue #28)
+        let _ = self.file.unlock();
+    }
+}
+

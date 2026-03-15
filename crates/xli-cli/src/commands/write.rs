@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -24,14 +25,14 @@ pub struct WriteArgs {
     pub dry_run: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct WriteOutput {
     written: u32,
     cells: Vec<String>,
     formulas_written: u32,
 }
 
-pub fn run(args: WriteArgs, human: bool) -> Result<()> {
+pub fn run(args: WriteArgs, human: bool) -> Result<bool> {
     let address = qualify_reference(&args.address, args.sheet.as_deref());
     let input = serde_json::json!({
         "file": args.file,
@@ -52,17 +53,17 @@ pub fn run(args: WriteArgs, human: bool) -> Result<()> {
     );
 
     match result {
-        Ok((commit, needs_recalc)) => output::emit(
+        Ok((commit, write_result)) => output::emit(
             &output::ok_envelope(
                 "write",
                 input,
                 WriteOutput {
                     written: 1,
                     cells: vec![address],
-                    formulas_written: u32::from(needs_recalc),
+                    formulas_written: u32::from(write_result.needs_recalc),
                 },
                 vec![UMYA_FALLBACK_WARNING.to_string()],
-                needs_recalc,
+                write_result.needs_recalc,
                 if args.dry_run {
                     xli_core::CommitMode::DryRun
                 } else {

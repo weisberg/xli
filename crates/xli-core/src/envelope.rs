@@ -1,9 +1,10 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::XliError;
 
 /// Standard command status values.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     Ok,
@@ -12,7 +13,7 @@ pub enum Status {
 }
 
 /// Mutation execution mode.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CommitMode {
     Atomic,
@@ -21,7 +22,7 @@ pub enum CommitMode {
 }
 
 /// Shared transaction metrics returned in response envelopes.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct CommitStats {
     pub elapsed_ms: u64,
     pub file_size_before: u64,
@@ -29,7 +30,7 @@ pub struct CommitStats {
 }
 
 /// Deterministic follow-up repair the caller can apply.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RepairSuggestion {
     pub action: String,
     pub suggestion: String,
@@ -38,10 +39,10 @@ pub struct RepairSuggestion {
 }
 
 /// Standard response envelope for every XLI command.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ResponseEnvelope<T>
 where
-    T: Serialize,
+    T: Serialize + JsonSchema,
 {
     pub status: Status,
     pub command: String,

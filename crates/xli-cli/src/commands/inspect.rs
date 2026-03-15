@@ -11,7 +11,7 @@ pub struct InspectArgs {
     pub file: PathBuf,
 }
 
-pub fn run(args: InspectArgs, human: bool) -> Result<()> {
+pub fn run(args: InspectArgs, human: bool) -> Result<bool> {
     let envelope = match xli_read::inspect(&args.file) {
         Ok(info) => ok_envelope(args.file, info),
         Err(error) => error_envelope(args.file, error),
