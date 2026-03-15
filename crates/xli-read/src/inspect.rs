@@ -1,11 +1,16 @@
-use calamine::{Reader, SheetType, Xlsx, open_workbook};
+use calamine::{open_workbook, Reader as XlsxReader, SheetType, Xlsx};
+use quick_xml::events::Event;
+use quick_xml::Reader as XmlReader;
 use schemars::JsonSchema;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::io::BufReader;
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
-use xli_core::{XliError, col_to_letter, parse_address, parse_range};
+use xli_core::{col_to_letter, parse_address, parse_range, XliError};
 use xli_fs::fingerprint;
+use zip::read::ZipArchive;
+use zip::result::ZipError;
 
 /// High-level workbook metadata returned by `xli inspect`.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -31,8 +36,7 @@ pub struct SheetInfo {
     pub named_ranges: Vec<String>,
     pub merged_regions: Vec<String>,
     /// True only when this sheet *is* a chart sheet (the entire sheet is one
-    /// chart). Regular worksheets containing embedded chart objects will be
-    /// false — they are WorkSheet type, not ChartSheet. (Issue #25)
+    /// chart sheet or when it contains an embedded chart object (Issue #25).
     pub is_chart_sheet: bool,
 }
 
@@ -48,6 +52,8 @@ pub fn inspect(path: &Path) -> Result<WorkbookInfo, XliError> {
     let workbook_fingerprint = fingerprint(path)?;
     let mut workbook: Xlsx<BufReader<std::fs::File>> =
         open_workbook(path).map_err(calamine_error)?;
+    let mut archive = open_workbook_archive(path)?;
+    let sheet_part_paths = discover_sheet_parts(&mut archive).unwrap_or_default();
 
     let has_macros = workbook.vba_project().is_some();
     let tables_loaded = workbook.load_tables().is_ok();
@@ -102,7 +108,12 @@ pub fn inspect(path: &Path) -> Result<WorkbookInfo, XliError> {
         let is_chart_sheet = metadata
             .get(index)
             .map(|sheet| sheet.typ == SheetType::ChartSheet)
-            .unwrap_or(false);
+            .unwrap_or(false)
+            || sheet_part_paths
+                .get(name.as_str())
+                .is_some_and(|sheet_path| {
+                    has_embedded_chart(&mut archive, sheet_path).unwrap_or(false)
+                });
 
         sheets.push(SheetInfo {
             name: name.clone(),
@@ -126,6 +137,285 @@ pub fn inspect(path: &Path) -> Result<WorkbookInfo, XliError> {
         defined_names,
         has_macros,
     })
+}
+
+fn open_workbook_archive(path: &Path) -> Result<ZipArchive<BufReader<File>>, XliError> {
+    let file = File::open(path).map_err(io_error)?;
+    ZipArchive::new(BufReader::new(file)).map_err(zip_error)
+}
+
+fn discover_sheet_parts(
+    archive: &mut ZipArchive<BufReader<File>>,
+) -> Result<HashMap<String, String>, XliError> {
+    let workbook_xml = read_xml_part(archive, "xl/workbook.xml")?;
+    let workbook_rels = read_xml_part(archive, "xl/_rels/workbook.xml.rels")?;
+
+    let sheet_relationships = parse_workbook_sheets(&workbook_xml)?;
+    let rel_targets = parse_relationship_targets(&workbook_rels, "xl/workbook.xml")?;
+
+    let mut sheet_parts = HashMap::new();
+    for (sheet_name, rel_id) in sheet_relationships {
+        if let Some(sheet_path) = rel_targets.get(&rel_id) {
+            sheet_parts.insert(sheet_name, sheet_path.to_owned());
+        }
+    }
+
+    Ok(sheet_parts)
+}
+
+fn has_embedded_chart(
+    archive: &mut ZipArchive<BufReader<File>>,
+    sheet_part_path: &str,
+) -> Result<bool, XliError> {
+    let sheet_rels = rels_path_for_part(sheet_part_path);
+    let rels_xml = match read_xml_part_optional(archive, &sheet_rels)? {
+        Some(xml) => xml,
+        None => return Ok(false),
+    };
+
+    let drawing_parts =
+        parse_relationship_targets_by_type(&rels_xml, sheet_part_path, |relationship_type| {
+            relationship_type.ends_with("/drawing")
+        })?;
+
+    for drawing_part in drawing_parts {
+        let drawing_rels = rels_path_for_part(&drawing_part);
+        let drawing_rels_xml = match read_xml_part_optional(archive, &drawing_rels)? {
+            Some(xml) => xml,
+            None => continue,
+        };
+
+        if parse_relationship_targets_by_type(
+            &drawing_rels_xml,
+            &drawing_part,
+            |relationship_type| relationship_type.contains("/chart"),
+        )?
+        .is_empty()
+        {
+            continue;
+        }
+
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
+fn parse_workbook_sheets(workbook_xml: &[u8]) -> Result<Vec<(String, String)>, XliError> {
+    let mut reader = XmlReader::from_reader(Cursor::new(workbook_xml));
+    let mut buffer = Vec::new();
+    let mut sheets = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buffer) {
+            Ok(Event::Start(start)) | Ok(Event::Empty(start)) => {
+                if start.name().local_name().as_ref() != b"sheet" {
+                    continue;
+                }
+
+                let mut sheet_name = None;
+                let mut rel_id = None;
+
+                for attribute in start.attributes() {
+                    let attribute = attribute.map_err(parse_xml_error)?;
+                    let key = normalize_xml_attr_name(&attribute)?;
+
+                    match key {
+                        key if key == "name" => {
+                            sheet_name = Some(decode_attribute(&reader, &attribute)?);
+                        }
+                        key if key == "id" => {
+                            rel_id = Some(decode_attribute(&reader, &attribute)?);
+                        }
+                        _ => {}
+                    }
+                }
+
+                if let (Some(name), Some(rel_id)) = (sheet_name, rel_id) {
+                    sheets.push((name, rel_id));
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(error) => return Err(io_error_from(error)),
+            _ => {}
+        }
+
+        buffer.clear();
+    }
+
+    Ok(sheets)
+}
+
+fn parse_relationship_targets_by_type(
+    xml: &[u8],
+    base_part_path: &str,
+    target_predicate: impl Fn(&str) -> bool,
+) -> Result<Vec<String>, XliError> {
+    let mut reader = XmlReader::from_reader(Cursor::new(xml));
+    let mut buffer = Vec::new();
+    let mut targets = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buffer) {
+            Ok(Event::Start(start)) | Ok(Event::Empty(start)) => {
+                if start.name().local_name().as_ref() != b"Relationship" {
+                    continue;
+                }
+
+                let mut rel_type = None;
+                let mut rel_target = None;
+
+                for attribute in start.attributes() {
+                    let attribute = attribute.map_err(parse_xml_error)?;
+                    let key = normalize_xml_attr_name(&attribute)?;
+
+                    match key {
+                        key if key == "type" => {
+                            rel_type = Some(decode_attribute(&reader, &attribute)?);
+                        }
+                        key if key == "target" => {
+                            rel_target = Some(decode_attribute(&reader, &attribute)?);
+                        }
+                        _ => {}
+                    }
+                }
+
+                if let (Some(rel_type), Some(rel_target)) = (rel_type, rel_target) {
+                    if target_predicate(&rel_type) {
+                        targets.push(resolve_ooxml_path(base_part_path, &rel_target));
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(error) => return Err(io_error_from(error)),
+            _ => {}
+        }
+
+        buffer.clear();
+    }
+
+    Ok(targets)
+}
+
+fn parse_relationship_targets(
+    xml: &[u8],
+    base_part_path: &str,
+) -> Result<HashMap<String, String>, XliError> {
+    let mut reader = XmlReader::from_reader(Cursor::new(xml));
+    let mut buffer = Vec::new();
+    let mut rel_targets = HashMap::new();
+
+    loop {
+        match reader.read_event_into(&mut buffer) {
+            Ok(Event::Start(start)) | Ok(Event::Empty(start)) => {
+                if start.name().local_name().as_ref() != b"Relationship" {
+                    continue;
+                }
+
+                let mut rel_id = None;
+                let mut rel_target = None;
+
+                for attribute in start.attributes() {
+                    let attribute = attribute.map_err(parse_xml_error)?;
+                    let key = normalize_xml_attr_name(&attribute)?;
+
+                    match key {
+                        key if key == "id" => {
+                            rel_id = Some(decode_attribute(&reader, &attribute)?);
+                        }
+                        key if key == "target" => {
+                            rel_target = Some(decode_attribute(&reader, &attribute)?);
+                        }
+                        _ => {}
+                    }
+                }
+
+                if let (Some(rel_id), Some(rel_target)) = (rel_id, rel_target) {
+                    rel_targets.insert(rel_id, resolve_ooxml_path(base_part_path, &rel_target));
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(error) => return Err(io_error_from(error)),
+            _ => {}
+        }
+
+        buffer.clear();
+    }
+
+    Ok(rel_targets)
+}
+
+fn rels_path_for_part(part_path: &str) -> String {
+    let mut iter = part_path.rsplitn(2, '/');
+    let file_name = iter.next().unwrap_or_default();
+    let parent = iter.next().unwrap_or_default();
+
+    if parent.is_empty() {
+        format!("_rels/{file_name}.rels")
+    } else {
+        format!("{parent}/_rels/{file_name}.rels")
+    }
+}
+
+fn resolve_ooxml_path(base_part_path: &str, target: &str) -> String {
+    let mut parts: Vec<&str> = base_part_path.split('/').collect();
+    let _ = parts.pop();
+
+    for segment in target.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                let _ = parts.pop();
+            }
+            _ => parts.push(segment),
+        }
+    }
+
+    parts.join("/")
+}
+
+fn read_xml_part(
+    archive: &mut ZipArchive<BufReader<File>>,
+    part_path: &str,
+) -> Result<Vec<u8>, XliError> {
+    read_xml_part_optional(archive, part_path)?.ok_or_else(|| XliError::OoxmlCorrupt {
+        details: format!("Part missing in workbook archive: {part_path}"),
+    })
+}
+
+fn read_xml_part_optional(
+    archive: &mut ZipArchive<BufReader<File>>,
+    part_path: &str,
+) -> Result<Option<Vec<u8>>, XliError> {
+    let mut file = match archive.by_name(part_path) {
+        Ok(file) => file,
+        Err(error) if matches!(error, ZipError::FileNotFound) => return Ok(None),
+        Err(error) => return Err(zip_error(error)),
+    };
+
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(io_error)?;
+    Ok(Some(bytes))
+}
+
+fn decode_attribute(
+    reader: &XmlReader<Cursor<&[u8]>>,
+    attribute: &quick_xml::events::attributes::Attribute,
+) -> Result<String, XliError> {
+    attribute
+        .decode_and_unescape_value(reader.decoder())
+        .map(|value| value.into_owned())
+        .map_err(io_error_from)
+}
+
+fn normalize_xml_attr_name(
+    attribute: &quick_xml::events::attributes::Attribute,
+) -> Result<String, XliError> {
+    let local_name = attribute.key.local_name();
+    let key = local_name.as_ref();
+    Ok(std::str::from_utf8(key)
+        .map_err(io_error_from)?
+        .to_ascii_lowercase())
 }
 
 fn format_dimension(start: (u32, u32), end: (u32, u32)) -> String {
@@ -158,10 +448,28 @@ fn calamine_error<E: std::fmt::Display>(error: E) -> XliError {
     }
 }
 
+fn io_error_from<E: std::fmt::Display>(error: E) -> XliError {
+    XliError::OoxmlCorrupt {
+        details: error.to_string(),
+    }
+}
+
+fn parse_xml_error<E: std::fmt::Display>(error: E) -> XliError {
+    XliError::OoxmlCorrupt {
+        details: error.to_string(),
+    }
+}
+
+fn zip_error(error: ZipError) -> XliError {
+    XliError::OoxmlCorrupt {
+        details: error.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::inspect;
-    use rust_xlsxwriter::Workbook;
+    use rust_xlsxwriter::{Chart, ChartType, Workbook};
     use tempfile::tempdir;
     use xli_core::XliError;
 
@@ -189,6 +497,61 @@ mod tests {
         assert_eq!(info.sheets[0].formula_count, 1);
         assert_eq!(info.sheets[1].name, "Raw Data");
         assert!(info.fingerprint.starts_with("sha256:"));
+    }
+
+    #[test]
+    fn worksheet_with_embedded_chart_is_chart_sheet() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("embedded_chart.xlsx");
+
+        let mut workbook = Workbook::new();
+        let worksheet = workbook.add_worksheet();
+
+        worksheet.write_string(0, 0, "Month").expect("write");
+        worksheet.write_string(1, 0, "Jan").expect("write");
+        worksheet.write_number(1, 1, 10.0).expect("write");
+        worksheet.write_number(2, 1, 20.0).expect("write");
+        worksheet.write_number(3, 1, 30.0).expect("write");
+
+        let mut chart = Chart::new(ChartType::Column);
+        chart.add_series().set_values("Sheet1!$B$1:$B$4");
+        worksheet.insert_chart(0, 2, &chart).expect("insert chart");
+
+        workbook.save(&path).expect("save");
+
+        let info = inspect(&path).expect("inspect");
+        assert_eq!(info.sheets.len(), 1);
+        assert!(info.sheets[0].is_chart_sheet);
+    }
+
+    #[test]
+    fn chartsheet_is_chart_sheet() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("chartsheet.xlsx");
+
+        let mut workbook = Workbook::new();
+        let data_sheet = workbook.add_worksheet();
+        data_sheet.write_string(0, 0, "Jan").expect("write");
+        data_sheet.write_number(0, 1, 10.0).expect("write");
+        data_sheet.write_string(1, 0, "Feb").expect("write");
+        data_sheet.write_number(1, 1, 20.0).expect("write");
+        data_sheet.write_string(2, 0, "Mar").expect("write");
+        data_sheet.write_number(2, 1, 30.0).expect("write");
+
+        let chart_sheet = workbook.add_chartsheet();
+        let mut chart = Chart::new(ChartType::Line);
+        chart.add_series().set_values("Sheet1!$B$1:$B$3");
+        chart_sheet
+            .insert_chart(0, 0, &chart)
+            .expect("insert chart");
+
+        workbook.save(&path).expect("save");
+
+        let info = inspect(&path).expect("inspect");
+        assert_eq!(info.sheets.len(), 2);
+        assert_eq!(info.sheets[0].name, "Sheet1");
+        assert_eq!(info.sheets[1].name, "Chart1");
+        assert!(info.sheets[1].is_chart_sheet);
     }
 
     #[test]

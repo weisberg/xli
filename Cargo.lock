@@ -2059,6 +2059,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "calamine",
+ "quick-xml 0.36.2",
  "rust_xlsxwriter",
  "schemars",
  "serde",
@@ -2066,6 +2067,7 @@ dependencies = [
  "tempfile",
  "xli-core",
  "xli-fs",
+ "zip",
 ]
 
 [[package]]
