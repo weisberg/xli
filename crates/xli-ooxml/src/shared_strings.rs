@@ -103,6 +103,10 @@ impl SharedStringTable {
     pub fn len(&self) -> usize {
         self.strings.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.strings.is_empty()
+    }
 }
 
 fn xml_error<E: std::fmt::Display>(error: E) -> XliError {

@@ -98,10 +98,9 @@ pub fn run(args: FormatArgs, human: bool) -> Result<bool> {
 }
 
 fn qualify_reference(reference: &str, sheet: Option<&str>) -> String {
-    if reference.contains('!') || sheet.is_none() {
-        reference.to_string()
-    } else {
-        format!("{}!{}", sheet.expect("sheet checked"), reference)
+    match sheet {
+        Some(name) if !reference.contains('!') => format!("{name}!{reference}"),
+        _ => reference.to_string(),
     }
 }
 

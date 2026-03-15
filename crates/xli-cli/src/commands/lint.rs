@@ -121,7 +121,7 @@ pub fn lint_workbook(
         }
 
         issues.extend(lint_formulas(&scanned));
-        issues.extend(lint_duplicate_headers(&sheet.name, &dimensions, path)?);
+        issues.extend(lint_duplicate_headers(&sheet.name, dimensions, path)?);
     }
 
     let filtered = issues

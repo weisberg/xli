@@ -35,6 +35,7 @@ where
     Ok(envelope.status == Status::Error)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn ok_envelope<T>(
     command: &str,
     input: serde_json::Value,

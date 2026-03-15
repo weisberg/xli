@@ -389,7 +389,7 @@ fn read_xml_part_optional(
 ) -> Result<Option<Vec<u8>>, XliError> {
     let mut file = match archive.by_name(part_path) {
         Ok(file) => file,
-        Err(error) if matches!(error, ZipError::FileNotFound) => return Ok(None),
+        Err(ZipError::FileNotFound) => return Ok(None),
         Err(error) => return Err(zip_error(error)),
     };
 
