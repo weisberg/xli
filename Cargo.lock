@@ -1774,7 +1774,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "rust_xlsxwriter",
+ "serde",
  "serde_json",
+ "tempfile",
  "xli-calc",
  "xli-core",
  "xli-fs",
@@ -1800,9 +1803,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fs4",
+ "rust_xlsxwriter",
+ "serde",
  "sha2",
  "tempfile",
  "xli-core",
+ "zip",
 ]
 
 [[package]]
@@ -1841,8 +1847,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "calamine",
+ "rust_xlsxwriter",
  "serde",
+ "tempfile",
  "xli-core",
+ "xli-fs",
 ]
 
 [[package]]
