@@ -16,9 +16,7 @@ pub struct SchemaArgs {
 
 pub fn run(args: SchemaArgs, human: bool) -> Result<bool> {
     let schema = match (&args.command, &args.result, args.openapi) {
-        (_, _, true) if args.command.is_none() && args.result.is_none() => {
-            Ok(xli_schema::emit_openapi())
-        }
+        (None, None, true) => Ok(xli_schema::emit_openapi()),
         (Some(_), Some(_), _) => {
             Err(xli_core::XliError::CliParseError {
             message: "--command and --result are mutually exclusive".to_string(),

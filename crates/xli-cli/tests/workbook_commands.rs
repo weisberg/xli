@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::process::Command;
+use std::process::Output;
 use tempfile::tempdir;
 
 #[test]
@@ -185,6 +186,75 @@ fn format_command_keeps_workbook_openable() {
     assert_eq!(inspect["status"], "ok");
 }
 
+#[test]
+fn sheet_add_dry_run_does_not_modify_workbook() {
+    let dir = tempdir().expect("tempdir");
+    let path = dir.path().join("test.xlsx");
+    run_status([
+        "create",
+        path.to_str().expect("path"),
+        "--sheets",
+        "Summary,Data",
+    ]);
+
+    let before = run_json([
+        "inspect",
+        path.to_str().expect("path"),
+    ]);
+    let before_len = before["output"]["sheets"]
+        .as_array()
+        .expect("sheets")
+        .len();
+
+    let dry_run = run_json([
+        "sheet",
+        path.to_str().expect("path"),
+        "--dry-run",
+        "add",
+        "Charts",
+    ]);
+    assert_eq!(dry_run["status"], "ok");
+    assert_eq!(dry_run["commit_mode"], "dry_run");
+
+    let after = run_json([
+        "inspect",
+        path.to_str().expect("path"),
+    ]);
+    assert_eq!(
+        after["output"]["sheets"]
+            .as_array()
+            .expect("sheets")
+            .len(),
+        before_len
+    );
+}
+
+#[test]
+fn sheet_add_with_bad_fingerprint_fails() {
+    let dir = tempdir().expect("tempdir");
+    let path = dir.path().join("test.xlsx");
+    run_status([
+        "create",
+        path.to_str().expect("path"),
+        "--sheets",
+        "Summary,Data",
+    ]);
+
+    let result = run_output([
+        "sheet",
+        path.to_str().expect("path"),
+        "--expect-fingerprint",
+        "sha256:0000",
+        "add",
+        "Charts",
+    ]);
+
+    assert!(!result.status.success());
+    let json: Value = serde_json::from_slice(&result.stdout).expect("json");
+    assert_eq!(json["status"], "error");
+    assert_eq!(json["errors"][0]["code"], "FINGERPRINT_MISMATCH");
+}
+
 fn run_status<const N: usize>(args: [&str; N]) {
     let output = Command::new(env!("CARGO_BIN_EXE_xli"))
         .args(args)
@@ -194,10 +264,14 @@ fn run_status<const N: usize>(args: [&str; N]) {
 }
 
 fn run_json<const N: usize>(args: [&str; N]) -> Value {
-    let output = Command::new(env!("CARGO_BIN_EXE_xli"))
-        .args(args)
-        .output()
-        .expect("command");
+    let output = run_output(args);
     assert!(output.status.success());
     serde_json::from_slice(&output.stdout).expect("json")
+}
+
+fn run_output<const N: usize>(args: [&str; N]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_xli"))
+        .args(args)
+        .output()
+        .expect("command")
 }

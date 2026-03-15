@@ -207,6 +207,11 @@ fn resolve_sheet_name(
     explicit: Option<&str>,
 ) -> Result<String, XliError> {
     if let Some(sheet_name) = explicit {
+        if !workbook.sheet_names().iter().any(|name| name == sheet_name) {
+            return Err(XliError::SheetNotFound {
+                sheet: sheet_name.to_string(),
+            });
+        }
         return Ok(sheet_name.to_string());
     }
 
@@ -256,7 +261,7 @@ fn calamine_error<E: std::fmt::Display>(error: E) -> XliError {
 
 #[cfg(test)]
 mod tests {
-    use super::{CellValueType, read_cell, read_range};
+    use super::{CellValueType, XliError, read_cell, read_range};
     use rust_xlsxwriter::Workbook;
     use serde_json::json;
     use tempfile::tempdir;
@@ -296,5 +301,19 @@ mod tests {
         assert!(range.truncated);
         assert_eq!(range.rows.len(), 1);
         assert_eq!(range.rows[0]["name"], json!("foo"));
+    }
+
+    #[test]
+    fn resolves_unknown_sheet_to_sheet_not_found_error() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("simple.xlsx");
+        let mut workbook = Workbook::new();
+        let sheet = workbook.add_worksheet();
+        sheet.set_name("Summary").expect("name");
+        sheet.write_string(0, 0, "value").expect("write");
+        workbook.save(&path).expect("save");
+
+        let err = read_cell(&path, "Missing!A1").expect_err("missing sheet");
+        assert!(matches!(err, XliError::SheetNotFound { sheet } if sheet == "Missing"));
     }
 }

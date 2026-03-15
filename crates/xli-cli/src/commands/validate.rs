@@ -13,14 +13,14 @@ pub struct ValidateArgs {
     pub file: PathBuf,
 }
 
-#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct ValidationError {
     pub cell: String,
     pub error: String,
     pub formula: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct ValidateOutput {
     pub errors: Vec<ValidationError>,
     pub clean: bool,

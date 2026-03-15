@@ -18,13 +18,13 @@ pub struct LintArgs {
     pub severity: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct LintRepair {
     pub description: String,
     pub op: xli_core::BatchOp,
 }
 
-#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct LintIssue {
     pub rule: String,
     pub severity: String,
@@ -33,12 +33,12 @@ pub struct LintIssue {
     pub suggested_repair: Option<LintRepair>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct LintOutput {
     pub issues: Vec<LintIssue>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ScannedCell {
     row: u32,
     col: String,
@@ -92,7 +92,7 @@ pub fn lint_workbook(
     let include_severity = severity_filter
         .as_ref()
         .filter(|value| !value.is_empty())
-        .map(str::to_lowercase);
+        .map(|value| value.to_lowercase());
 
     let mut issues = Vec::new();
 
@@ -151,7 +151,7 @@ fn parse_list_filter(value: Option<&str>) -> Option<BTreeSet<String>> {
     })
 }
 
-fn lint_formulas(cells: Vec<ScannedCell>) -> Vec<LintIssue> {
+fn lint_formulas(cells: &[ScannedCell]) -> Vec<LintIssue> {
     let mut issues = Vec::new();
 
     for cell in cells {

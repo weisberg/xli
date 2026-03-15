@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use std::path::PathBuf;
 use xli_core::SheetAction;
-use xli_fs::atomic_commit;
+use xli_fs::{AtomicCommitOptions, atomic_commit_with_options};
 use xli_ooxml::UMYA_FALLBACK_WARNING;
 
 use crate::output;
@@ -12,6 +12,10 @@ use crate::output;
 #[derive(Debug, Args)]
 pub struct SheetArgs {
     pub file: PathBuf,
+    #[arg(long)]
+    pub expect_fingerprint: Option<String>,
+    #[arg(long)]
+    pub dry_run: bool,
     #[command(subcommand)]
     pub action: SheetCommand,
 }
@@ -59,10 +63,17 @@ pub fn run(args: SheetArgs, human: bool) -> Result<bool> {
     };
     let input = serde_json::json!({ "file": args.file, "action": action });
 
-    let result = atomic_commit(&args.file, None, |src, dst| {
-        xli_ooxml::apply_sheet_action(src, dst, &action)?;
-        Ok::<_, xli_core::XliError>(())
-    });
+    let result = atomic_commit_with_options(
+        &args.file,
+        args.expect_fingerprint.as_deref(),
+        AtomicCommitOptions {
+            dry_run: args.dry_run,
+        },
+        |src, dst| {
+            xli_ooxml::apply_sheet_action(src, dst, &action)?;
+            Ok::<_, xli_core::XliError>(())
+        },
+    );
 
     match result {
         Ok((commit, ())) => output::emit(
@@ -74,7 +85,11 @@ pub fn run(args: SheetArgs, human: bool) -> Result<bool> {
                 },
                 vec![UMYA_FALLBACK_WARNING.to_string()],
                 false,
-                xli_core::CommitMode::Atomic,
+                if args.dry_run {
+                    xli_core::CommitMode::DryRun
+                } else {
+                    xli_core::CommitMode::Atomic
+                },
                 Some(commit.fingerprint_before),
                 Some(commit.fingerprint_after),
                 commit.stats,
