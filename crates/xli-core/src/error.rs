@@ -9,6 +9,10 @@ use crate::addressing::AddressError;
 pub enum XliError {
     #[error("Workbook file not found: {path}")]
     FileNotFound { path: String },
+    #[error("CLI parse error: {message}")]
+    CliParseError { message: String },
+    #[error("Write lock is already held for {path}")]
+    LockConflict { path: String },
     #[error("Sheet not found: {sheet}")]
     SheetNotFound { sheet: String },
     #[error("Cell reference {address} is outside sheet dimensions")]

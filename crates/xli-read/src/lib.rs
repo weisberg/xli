@@ -1,3 +1,7 @@
 #![forbid(unsafe_code)]
 
-//! Workspace bootstrap stub for the xli-read crate.
+//! Read-only workbook inspection helpers.
+
+pub mod inspect;
+
+pub use inspect::{SheetInfo, WorkbookInfo, inspect};
